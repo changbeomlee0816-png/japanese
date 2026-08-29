@@ -99,7 +99,7 @@ export function LiveBanner({ day, live, legs, autoShift }: Props) {
         </div>
       )}
 
-      {live.runningLateMin > 0 && (
+      {live.runningLateMin > 0 && (current || next) && (
         <>
           <div className="live__divider" />
           <div className="live__row">
@@ -107,7 +107,7 @@ export function LiveBanner({ day, live, legs, autoShift }: Props) {
               <Icon name="warning" size={19} strokeWidth={2} />
             </span>
             <div className="live__text">
-              <strong>{live.runningLateMin}분 밀렸어요</strong>
+              <strong>{formatDuration(live.runningLateMin)} 밀렸어요</strong>
               <span className="muted small">
                 {autoShift ? '남은 일정을 한 번에 미룰 수 있어요' : '설정에서 자동 조정을 켜면 알아서 밀어줍니다'}
               </span>
@@ -117,10 +117,11 @@ export function LiveBanner({ day, live, legs, autoShift }: Props) {
               className="btn btn--tinted btn--sm"
               onClick={() => {
                 const target = live.states.find((s) => s.status === 'overdue' && !s.item.done);
-                if (target) actions.shiftFrom(day.id, target.item.id, live.runningLateMin);
+                const delta = Math.round(live.runningLateMin / 5) * 5;
+                if (target && delta > 0) actions.shiftFrom(day.id, target.item.id, delta);
               }}
             >
-              {live.runningLateMin}분 밀기
+              일정 조정
             </button>
           </div>
         </>
