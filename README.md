@@ -6,13 +6,75 @@
 ```bash
 npm install
 npm run dev             # http://localhost:5173
-npm run build           # dist/ — 정적 호스팅용
-npm run build:artifact  # dist-artifact/tabi.html — 공유 링크용 단일 파일
+npm run build           # dist/ — GitHub Pages 등 정적 호스팅용
+npm run build:artifact  # dist-artifact/tabi.html — Claude Artifact용 단일 파일
 ```
 
 ---
 
-## 링크 하나로 같이 보기
+## 링크 하나로 같이 보기 (Supabase)
+
+`npm run build`로 만든 앱을 GitHub Pages에 올리고, 일정은 Supabase에 저장합니다.
+링크를 받은 사람은 **계정 없이 주소만으로** 열어볼 수 있고, 일정을 고치면 그 화면에도 자동으로 반영됩니다.
+
+### 링크 구조
+
+```
+보기 링크   https://<도메인>/japanese/?t=<일정 id>
+수정 링크   https://<도메인>/japanese/?t=<일정 id>#k=<수정 토큰>
+```
+
+수정 토큰은 URL 프래그먼트(`#`)에 담습니다. 프래그먼트는 서버로 전송되지 않아 호스팅 서버 로그에 남지 않고,
+앱은 토큰을 받는 즉시 브라우저에 저장한 뒤 **주소창에서 지웁니다**. 그래서 주소창을 그대로 복사해
+공유해도 수정 권한이 새어 나가지 않습니다. 다른 기기에서 편집하려면 설정 → 공유 링크 →
+`수정 링크 보기`에서 따로 복사하세요.
+
+### 데이터 모델과 권한
+
+```sql
+trips(id uuid, edit_token uuid, title text, data jsonb, updated_at timestamptz)
+```
+
+`trips` 테이블은 RLS를 켜고 **정책을 하나도 두지 않습니다**. 따라서 공개 키(anon)로는 테이블을
+직접 읽거나 쓸 수 없고, `security definer` 함수 세 개로만 접근합니다.
+
+| 함수 | 하는 일 | 필요한 것 |
+|---|---|---|
+| `trip_get(id)` | 일정 읽기 (edit_token은 반환하지 않음) | 링크의 uuid |
+| `trip_head(id)` | 변경 시각만 확인 (폴링용) | 링크의 uuid |
+| `trip_create(title, data)` | 링크 만들기, 수정 토큰 발급 | — (시간당 100건 제한) |
+| `trip_save(id, token, title, data)` | 저장 | uuid + 수정 토큰 |
+
+그래서 `.env.production`에 커밋된 anon 키는 **공개돼도 되는 값**입니다. 보안은 키가 아니라
+"uuid를 알아야 읽고, 토큰까지 맞아야 쓴다"는 규칙이 지킵니다.
+Supabase 보안 린터가 `rls_enabled_no_policy`와 `anon_security_definer_function_executable`을
+경고로 띄우는데, 둘 다 이 설계의 의도된 결과입니다.
+
+> 링크의 uuid를 아는 사람은 누구나 일정을 볼 수 있습니다(이른바 unlisted 링크).
+> 민감한 내용은 넣지 마세요.
+
+### 반영 방식
+
+- 수정하면 1.8초 뒤에 한 번으로 묶어 저장합니다.
+- 보는 쪽은 15초마다 변경 시각만 확인하고, 바뀌었을 때만 전체를 받아옵니다.
+  탭을 다시 열거나 창에 포커스가 돌아오면 즉시 확인합니다.
+- 수정 권한이 있는 화면에서 다른 기기의 변경이 감지되면, 편집 중인 내용을 덮어쓰지 않도록
+  자동 반영 대신 `최신본 불러오기` 버튼을 띄웁니다.
+- 남의 링크를 열어도 **내 로컬 일정은 그대로 남습니다.** 공유 링크의 일정은 별도 캐시
+  (`tabi.shared.<id>`)에 저장되고, `이 링크에서 나가기`를 누르면 원래 내 일정으로 돌아옵니다.
+
+### 배포
+
+`.github/workflows/deploy.yml`이 `main` 또는 개발 브랜치에 푸시될 때 타입 검사 → 빌드 →
+GitHub Pages 배포를 실행합니다. 저장소 **Settings → Pages → Source**를 `GitHub Actions`로
+한 번만 바꿔주면 됩니다.
+
+Supabase 프로젝트는 무료 티어라 약 1주일간 접속이 없으면 자동으로 일시정지됩니다.
+그때는 Supabase 대시보드에서 재개해야 링크가 다시 열립니다.
+
+---
+
+## Claude Artifact로 공유하기 (대안)
 
 `npm run build:artifact`가 만드는 단일 HTML을 Claude Artifact로 발행하면, 링크를 연 모든 사람이
 **같은 최신 일정**을 봅니다. 원리는 간단합니다.
@@ -134,9 +196,10 @@ Directions 호출은 세션 캐시를 두어 같은 구간을 반복 조회하�
 
 ## 알아두면 좋은 것
 
-- **직접 호스팅한 경우 모든 데이터는 이 브라우저에만 저장됩니다.** 서버도 계정도 없습니다.
+- **공유 링크를 만들기 전까지는 모든 데이터가 이 브라우저에만 저장됩니다.** 계정도 로그인도 없습니다.
   기기를 옮기거나 백업하려면 설정 → 백업 파일 내보내기/가져오기를 쓰세요.
-  공유 링크로 쓰는 경우에는 일정이 발행된 문서에 담겨 링크를 연 모두에게 공유됩니다.
+- **공유 링크를 만들면 그 여행 일정만** Supabase에 올라갑니다. 구글맵 API 키를 포함한 설정은
+  서버로 보내지 않고 각자 브라우저에만 남습니다.
 - **비용은 추정치입니다.** 교통비는 통화권별 요금 체계를 근사한 모델(일본 지하철 기본요금,
   거리 비례 가산, 장거리 철도 별도 계산 등)로 계산합니다. 숙박비와 항공권은 포함되지 않습니다.
 - **현지인 지수는 추정 지표입니다.** 평점·리뷰 수·가격대로 계산한 값이며 실제 손님 구성과 다를 수 있습니다.
@@ -157,7 +220,9 @@ src/
 │   ├── fares.ts          통화권별 요금 모델
 │   ├── parsePlan.ts      자유 텍스트 → 구조화된 일정
 │   ├── resolve.ts        좌표 없는 항목 일괄 위치 찾기
-│   ├── share.ts          공유 링크 발행 · 읽기 전용 감지 · 파일 저장
+│   ├── supabase.ts       Supabase RPC 클라이언트 (의존성 없이 fetch만)
+│   ├── cloud.ts          공유 링크 동기화 · 수정 토큰 · 폴링
+│   ├── share.ts          Artifact 자체 발행 · 읽기 전용 감지 · 파일 저장
 │   ├── category.ts       분류 메타데이터
 │   └── time.ts           시각·기간 유틸
 ├── store/

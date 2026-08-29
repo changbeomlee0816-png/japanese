@@ -7,6 +7,8 @@ import { DEFAULT_RATE_TO_KRW } from '../lib/fares';
 import { todayISO } from '../lib/time';
 import { saveFile } from '../lib/share';
 import { Row, Sheet, Switch, Segmented } from './ui';
+import { ShareLinkSection } from './ShareLinkSection';
+import { useCloud } from '../lib/cloud';
 import { Icon } from './Icon';
 
 interface Props {
@@ -17,6 +19,7 @@ interface Props {
 
 export function SettingsScreen({ trip, settings, readOnly = false }: Props) {
   const { trips } = useStore();
+  const cloud = useCloud();
   const [keyDraft, setKeyDraft] = useState(settings.googleMapsApiKey);
   const [tripSheet, setTripSheet] = useState(false);
   const [newTrip, setNewTrip] = useState(false);
@@ -62,6 +65,8 @@ export function SettingsScreen({ trip, settings, readOnly = false }: Props) {
         <h1>설정</h1>
         <p>지도 연동, 실시간 알림, 데이터 관리</p>
       </div>
+
+      <ShareLinkSection trip={trip} />
 
       <div className="section">
         <div className="section__header">
@@ -202,8 +207,10 @@ export function SettingsScreen({ trip, settings, readOnly = false }: Props) {
             e.target.value = '';
           }}
         />
-        <p className="muted tiny" style={{ padding: '10px 4px 0' }}>
-          모든 일정은 이 브라우저(localStorage)에만 저장됩니다. 기기를 옮길 때는 백업 파일을 쓰세요.
+        <p className="muted tiny" style={{ padding: '10px 4px 0', lineHeight: 1.6 }}>
+          {cloud.mode === 'off'
+            ? '일정은 이 브라우저(localStorage)에만 저장됩니다. 기기를 옮길 때는 백업 파일을 쓰세요.'
+            : '이 일정은 공유 서버에 저장되어 링크로 열립니다. 설정과 구글맵 키는 이 브라우저에만 남습니다.'}
         </p>
       </div>
 

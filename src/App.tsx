@@ -14,6 +14,7 @@ import { Icon, type IconName } from './components/Icon';
 import { useScrolled } from './components/ui';
 import { SaveChip, ShareNotice } from './components/ShareBar';
 import { initShare, setUiSnapshot, takeUiState, useShare } from './lib/share';
+import { initCloud, useCloud } from './lib/cloud';
 
 const TABS: Array<{ key: TabKey; label: string; icon: IconName }> = [
   { key: 'plan', label: '일정', icon: 'plan' },
@@ -39,7 +40,9 @@ export default function App() {
   const mapsReady = useMapsReady();
 
   const share = useShare();
-  const readOnly = share.mode === 'readonly';
+  const cloud = useCloud();
+  // 공유 링크를 보기만 하는 사람, 또는 쓰기 권한 없는 아티팩트 뷰어
+  const readOnly = cloud.mode === 'viewer' || (cloud.mode === 'off' && share.mode === 'readonly');
 
   // 공유본 저장 뒤 화면이 새로고침되므로, 보던 탭·날짜·스크롤을 되돌려 준다
   const restored = useMemo(() => takeUiState(), []);
@@ -50,9 +53,10 @@ export default function App() {
   const [printing, setPrinting] = useState(false);
   const [mapsError, setMapsError] = useState<string | null>(null);
 
-  /* 공유 모드 판별 */
+  /* 공유 모드 판별 — 링크로 열렸으면 그 일정을 불러온다 */
   useEffect(() => {
     void initShare();
+    void initCloud((trips) => actions.applyRemoteTrips(trips));
   }, []);
 
   /* 현재 보고 있는 위치를 기록해 두었다가 새로고침 뒤 복원 */

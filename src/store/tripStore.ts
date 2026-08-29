@@ -6,10 +6,24 @@ import { createSampleTrip } from '../lib/sample';
 import { defaultDuration, parsePlanText } from '../lib/parsePlan';
 import { DEFAULT_RATE_TO_KRW } from '../lib/fares';
 import { isPublishable, knownReadOnly, markDirty, readEmbeddedState } from '../lib/share';
+import { markDirty as cloudMarkDirty } from '../lib/cloud';
 
 const TRIP_KEY = 'tabi.trips.v1';
 const ACTIVE_KEY = 'tabi.activeTripId.v1';
 const SETTINGS_KEY = 'tabi.settings.v1';
+/** 공유 링크로 열었을 때 쓰는 캐시 키 — 내 일정(TRIP_KEY)과 절대 섞이지 않게 분리한다 */
+const SHARED_PREFIX = 'tabi.shared.';
+
+/** ?t= 로 열렸다면 그 일정 id. 이 경우 내 로컬 일정은 건드리지 않는다. */
+function linkedTripId(): string | null {
+  try {
+    return new URLSearchParams(window.location.search).get('t');
+  } catch {
+    return null;
+  }
+}
+
+const linkedId = linkedTripId();
 
 export const DEFAULT_SETTINGS: Settings = {
   googleMapsApiKey: '',
@@ -59,6 +73,18 @@ function latestUpdate(trips: Trip[]): string {
  * 읽기 전용 뷰에서는 항상 공유본을 그대로 보여준다 — 안 그러면 나만 다른 화면을 보게 된다.
  */
 function loadInitial(): State {
+  // 공유 링크로 들어온 경우: 서버 응답이 오기 전까지 지난번에 본 내용을 보여준다.
+  // 내 로컬 일정을 읽지도, 쓰지도 않는다.
+  if (linkedId) {
+    const cached = readJSON<Trip[]>(SHARED_PREFIX + linkedId, []);
+    const trips = cached.length > 0 ? cached : [createSampleTrip()];
+    return {
+      trips,
+      activeTripId: trips[0].id,
+      settings: { ...DEFAULT_SETTINGS, ...readJSON<Partial<Settings>>(SETTINGS_KEY, {}) },
+    };
+  }
+
   const localTrips = readJSON<Trip[]>(TRIP_KEY, []);
   const embedded = isPublishable() ? readEmbeddedState() : null;
 
@@ -86,6 +112,8 @@ function loadInitial(): State {
 
 let state: State = loadInitial();
 const listeners = new Set<() => void>();
+/** 서버에서 받아온 일정을 적용할 때는 다시 저장을 걸지 않는다 */
+let suppressSync = 0;
 
 function emit() {
   for (const l of listeners) l();
@@ -94,11 +122,20 @@ function emit() {
 function set(updater: (prev: State) => State) {
   const prev = state;
   state = updater(state);
-  writeJSON(TRIP_KEY, state.trips);
-  writeJSON(ACTIVE_KEY, state.activeTripId);
+  if (linkedId) {
+    // 공유 링크를 보는 중이다 — 내 로컬 일정은 그대로 두고 이 링크의 캐시만 갱신한다
+    writeJSON(SHARED_PREFIX + linkedId, state.trips);
+  } else {
+    writeJSON(TRIP_KEY, state.trips);
+    writeJSON(ACTIVE_KEY, state.activeTripId);
+  }
   writeJSON(SETTINGS_KEY, state.settings);
-  // 설정(구글맵 키 포함)은 절대 발행하지 않는다. 여행 데이터가 바뀐 경우에만 공유본을 갱신한다.
-  if (state.trips !== prev.trips) markDirty(state.trips);
+  // 설정(구글맵 키 포함)은 절대 공유하지 않는다. 여행 데이터가 바뀐 경우에만 공유본을 갱신한다.
+  if (state.trips !== prev.trips && suppressSync === 0) {
+    const active = state.trips.find((t) => t.id === state.activeTripId) ?? state.trips[0];
+    markDirty(state.trips);
+    cloudMarkDirty(state.trips, active?.title ?? '여행 일정');
+  }
   emit();
 }
 
@@ -146,6 +183,21 @@ function sortByTime(items: Item[]): Item[] {
  * ------------------------------------------------------------------ */
 
 export const actions = {
+  /** 공유 서버에서 받아온 일정으로 통째로 교체한다 (저장을 되돌려 걸지 않는다) */
+  applyRemoteTrips(trips: Trip[]) {
+    if (trips.length === 0) return;
+    suppressSync += 1;
+    try {
+      set((prev) => ({
+        ...prev,
+        trips,
+        activeTripId: trips.some((t) => t.id === prev.activeTripId) ? prev.activeTripId : trips[0].id,
+      }));
+    } finally {
+      suppressSync -= 1;
+    }
+  },
+
   setActiveTrip(id: string) {
     set((prev) => ({ ...prev, activeTripId: id }));
   },

@@ -1025,3 +1025,53 @@
     display: none !important;
   }
 }
+
+/* ── 공유 링크 ───────────────────────────────────────── */
+
+.linkbox {
+  background: var(--card);
+  border-radius: var(--r-md);
+  box-shadow: var(--shadow-1);
+  padding: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+  margin-bottom: 10px;
+}
+
+.linkbox--danger {
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--red) 32%, transparent), var(--shadow-1);
+}
+
+.linkbox__label {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--label-2);
+  letter-spacing: -0.005em;
+}
+
+.linkbox--danger .linkbox__label {
+  color: var(--red);
+}
+
+.linkbox__url {
+  display: block;
+  font-family: ui-monospace, 'SF Mono', SFMono-Regular, Menlo, monospace;
+  font-size: 12.5px;
+  letter-spacing: 0;
+  background: var(--fill);
+  border-radius: 8px;
+  padding: 9px 11px;
+  overflow-x: auto;
+  white-space: nowrap;
+  color: var(--label);
+}
+
+.linkbox__actions {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
