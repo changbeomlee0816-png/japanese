@@ -1,0 +1,311 @@
+/* ==========================================================================
+   PDF(인쇄) 문서 스타일
+   화면에서는 A4 비율 미리보기로, 인쇄할 때는 종이에 맞춰 나온다.
+   ========================================================================== */
+
+.paper {
+  background: #fff;
+  color: #111;
+  max-width: 760px;
+  margin: 0 auto;
+  padding: 34px 38px 40px;
+  border-radius: 8px;
+  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.14);
+  font-size: 13px;
+  line-height: 1.55;
+  letter-spacing: -0.005em;
+}
+
+.paper__eyebrow {
+  margin: 0;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: #8a8a8e;
+}
+
+.paper__cover h1 {
+  margin: 6px 0 8px;
+  font-size: 30px;
+  font-weight: 700;
+  letter-spacing: -0.03em;
+  color: #000;
+}
+
+.paper__sub {
+  margin: 0;
+  color: #55555a;
+  font-size: 13.5px;
+}
+
+.paper__summary {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 22px 0 10px;
+  font-size: 12.5px;
+}
+
+.paper__summary th,
+.paper__summary td {
+  border: 1px solid #e2e2e6;
+  padding: 8px 10px;
+  text-align: left;
+}
+
+.paper__summary th {
+  background: #f6f6f8;
+  font-weight: 600;
+  color: #47474c;
+  width: 20%;
+}
+
+.paper__krw {
+  color: #8a8a8e;
+  font-size: 11.5px;
+}
+
+.paper__note {
+  margin: 10px 0 0;
+  font-size: 11.5px;
+  color: #8a8a8e;
+  line-height: 1.6;
+}
+
+.paper__day {
+  margin-top: 30px;
+  page-break-inside: auto;
+  break-inside: auto;
+}
+
+.paper__day h2 {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  margin: 0 0 10px;
+  font-size: 17px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  padding-bottom: 8px;
+  border-bottom: 2px solid #111;
+  page-break-after: avoid;
+  break-after: avoid;
+}
+
+.paper__day h2 em {
+  font-style: normal;
+  font-weight: 400;
+  font-size: 13.5px;
+  color: #8a8a8e;
+}
+
+.paper__daynum {
+  background: #111;
+  color: #fff;
+  border-radius: 5px;
+  padding: 2px 8px;
+  font-size: 12px;
+  letter-spacing: 0;
+}
+
+.paper__table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12.5px;
+}
+
+.paper__table th,
+.paper__table td {
+  padding: 8px 9px;
+  text-align: left;
+  vertical-align: top;
+  border-bottom: 1px solid #ececef;
+}
+
+.paper__table thead th {
+  background: #f6f6f8;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  color: #55555a;
+  text-transform: uppercase;
+  border-bottom: 1px solid #d8d8dc;
+}
+
+.paper__table tbody tr {
+  page-break-inside: avoid;
+  break-inside: avoid;
+}
+
+.paper__addr,
+.paper__memo {
+  display: block;
+  font-size: 11.5px;
+  color: #8a8a8e;
+  margin-top: 2px;
+}
+
+.paper__memo {
+  color: #55555a;
+  padding-left: 8px;
+  border-left: 2px solid #e2e2e6;
+  margin-top: 4px;
+}
+
+.paper__legrow td {
+  color: #55555a;
+  font-size: 11.5px;
+  background: #fafafb;
+  border-bottom: 1px solid #ececef;
+}
+
+.paper__empty {
+  color: #8a8a8e;
+  text-align: center;
+  padding: 18px;
+}
+
+.paper__table tfoot th,
+.paper__table tfoot td {
+  border-top: 2px solid #111;
+  border-bottom: none;
+  font-weight: 700;
+  padding-top: 9px;
+}
+
+.paper__table tfoot th {
+  text-align: right;
+}
+
+.paper__food {
+  margin-top: 14px;
+  background: #f6f6f8;
+  border-radius: 8px;
+  padding: 12px 14px;
+  page-break-inside: avoid;
+  break-inside: avoid;
+}
+
+.paper__food h3 {
+  margin: 0 0 7px;
+  font-size: 12.5px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+}
+
+.paper__food ul {
+  margin: 0;
+  padding-left: 16px;
+  font-size: 12px;
+  color: #47474c;
+}
+
+.paper__food li {
+  margin-bottom: 3px;
+}
+
+.paper__food em {
+  font-style: normal;
+  color: #8a8a8e;
+}
+
+.paper__footer {
+  display: flex;
+  justify-content: space-between;
+  margin-top: 30px;
+  padding-top: 12px;
+  border-top: 1px solid #e2e2e6;
+  font-size: 11px;
+  color: #8a8a8e;
+}
+
+/* ── 실제 인쇄 ───────────────────────────────────────── */
+
+@page {
+  size: A4;
+  margin: 14mm 12mm;
+}
+
+@media print {
+  html,
+  body {
+    background: #fff !important;
+  }
+
+  .app,
+  .navbar,
+  .tabbar,
+  .fab,
+  .sheet-backdrop,
+  .print-toolbar,
+  .print-options,
+  .print-hint {
+    display: none !important;
+  }
+
+  .print-overlay {
+    background: #fff !important;
+    padding: 0 !important;
+    min-height: 0 !important;
+  }
+
+  .paper {
+    max-width: none;
+    margin: 0;
+    padding: 0;
+    box-shadow: none;
+    border-radius: 0;
+    font-size: 10.5pt;
+  }
+
+  .paper__cover {
+    page-break-after: always;
+    break-after: page;
+  }
+
+  .paper__day {
+    page-break-before: auto;
+    margin-top: 0;
+    padding-top: 4mm;
+  }
+
+  .paper__day + .paper__day {
+    page-break-before: always;
+    break-before: page;
+  }
+
+  .paper__table thead {
+    display: table-header-group;
+  }
+
+  a {
+    color: inherit;
+    text-decoration: none;
+  }
+}
+
+/* 표의 숫자 칸은 줄바꿈하지 않는다 */
+.paper__table td.mono,
+.paper__table tfoot td {
+  white-space: nowrap;
+}
+
+.paper__table thead th {
+  white-space: nowrap;
+}
+
+@media (max-width: 640px) {
+  .paper {
+    padding: 22px 16px 28px;
+    border-radius: 0;
+    font-size: 12px;
+  }
+
+  .paper__cover h1 {
+    font-size: 24px;
+  }
+
+  .paper__summary th {
+    width: auto;
+  }
+}
