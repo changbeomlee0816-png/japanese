@@ -23,9 +23,11 @@ interface Props {
   bias?: LatLng;
   onShowFood: (item: Item) => void;
   onPrint: () => void;
+  /** 공유 링크를 보기만 하는 사람 — 편집 UI를 숨긴다 */
+  readOnly?: boolean;
 }
 
-export function PlanScreen({ trip, settings, dayIndex, onDayChange, bias, onShowFood, onPrint }: Props) {
+export function PlanScreen({ trip, settings, dayIndex, onDayChange, bias, onShowFood, onPrint, readOnly = false }: Props) {
   const day = trip.days[dayIndex];
   const now = useNow(1000);
   const { legs, loading, liveCount } = useLegs(day, trip.currency, !!settings.googleMapsApiKey);
@@ -96,7 +98,7 @@ export function PlanScreen({ trip, settings, dayIndex, onDayChange, bias, onShow
         </p>
       </div>
 
-      <DayPicker trip={trip} index={dayIndex} onChange={onDayChange} />
+      <DayPicker trip={trip} index={dayIndex} onChange={onDayChange} allowAdd={!readOnly} />
 
       <div className="section">
         <div className="day-head">
@@ -109,9 +111,11 @@ export function PlanScreen({ trip, settings, dayIndex, onDayChange, bias, onShow
               {day.title ? ` · ${day.title}` : ''}
             </p>
           </div>
-          <button type="button" className="btn btn--gray btn--sm" onClick={() => setDayMenu(true)}>
-            <Icon name="gear" size={15} strokeWidth={2} /> 이 날
-          </button>
+          {!readOnly && (
+            <button type="button" className="btn btn--gray btn--sm" onClick={() => setDayMenu(true)}>
+              <Icon name="gear" size={15} strokeWidth={2} /> 이 날
+            </button>
+          )}
         </div>
 
         <div className="stat-row">
@@ -141,9 +145,11 @@ export function PlanScreen({ trip, settings, dayIndex, onDayChange, bias, onShow
               <>
                 <Icon name="warning" size={17} strokeWidth={2} color="var(--orange)" />
                 <span className="small">위치가 없는 일정 {totals.missing}개 — 경로와 비용이 빠집니다</span>
-                <button type="button" className="btn btn--tinted btn--sm" onClick={runResolve}>
-                  자동으로 찾기
-                </button>
+                {!readOnly && (
+                  <button type="button" className="btn btn--tinted btn--sm" onClick={runResolve}>
+                    자동으로 찾기
+                  </button>
+                )}
               </>
             )}
             {!loading && totals.missing === 0 && !mapsLoaded() && (
@@ -170,16 +176,22 @@ export function PlanScreen({ trip, settings, dayIndex, onDayChange, bias, onShow
           <EmptyState
             icon="plan"
             title="이 날은 아직 비어 있어요"
-            body={'가고 싶은 곳을 하나씩 넣거나,\n메모해 둔 일정을 그대로 붙여넣으세요.'}
+            body={
+              readOnly
+                ? '이 날짜에는 아직 등록된 일정이 없습니다.'
+                : '가고 싶은 곳을 하나씩 넣거나,\n메모해 둔 일정을 그대로 붙여넣으세요.'
+            }
             action={
-              <div style={{ display: 'flex', gap: 8, justifyContent: 'center' }}>
-                <button className="btn btn--primary" type="button" onClick={() => setEditing({ item: null })}>
-                  일정 추가
-                </button>
-                <button className="btn btn--tinted" type="button" onClick={() => setQuickAdd(true)}>
-                  붙여넣기
-                </button>
-              </div>
+              readOnly ? undefined : (
+                <div style={{ display: 'flex', gap: 8, justifyContent: 'center' }}>
+                  <button className="btn btn--primary" type="button" onClick={() => setEditing({ item: null })}>
+                    일정 추가
+                  </button>
+                  <button className="btn btn--tinted" type="button" onClick={() => setQuickAdd(true)}>
+                    붙여넣기
+                  </button>
+                </div>
+              )
             }
           />
         ) : (
@@ -192,6 +204,7 @@ export function PlanScreen({ trip, settings, dayIndex, onDayChange, bias, onShow
             onEditItem={(item) => setEditing({ item })}
             onFindPlace={(item) => setEditing({ item, focusPlace: true })}
             onShowFood={onShowFood}
+            readOnly={readOnly}
           />
         )}
       </div>
@@ -199,15 +212,17 @@ export function PlanScreen({ trip, settings, dayIndex, onDayChange, bias, onShow
       {day.items.length > 0 && (
         <div className="section">
           <div className="list">
-            <Row label="일정 붙여넣기" icon="sparkles" accent onClick={() => setQuickAdd(true)} />
+            {!readOnly && <Row label="일정 붙여넣기" icon="sparkles" accent onClick={() => setQuickAdd(true)} />}
             <Row label="PDF로 내보내기" icon="printer" accent onClick={onPrint} />
           </div>
         </div>
       )}
 
-      <button className="fab" type="button" onClick={() => setEditing({ item: null })} aria-label="일정 추가">
-        <Icon name="plus" size={26} strokeWidth={2.4} />
-      </button>
+      {!readOnly && (
+        <button className="fab" type="button" onClick={() => setEditing({ item: null })} aria-label="일정 추가">
+          <Icon name="plus" size={26} strokeWidth={2.4} />
+        </button>
+      )}
 
       {editing && (
         <ItemEditSheet

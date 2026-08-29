@@ -12,6 +12,8 @@ import { SettingsScreen } from './components/SettingsScreen';
 import { PrintPreview } from './components/PrintDocument';
 import { Icon, type IconName } from './components/Icon';
 import { useScrolled } from './components/ui';
+import { SaveChip, ShareNotice } from './components/ShareBar';
+import { initShare, setUiSnapshot, takeUiState, useShare } from './lib/share';
 
 const TABS: Array<{ key: TabKey; label: string; icon: IconName }> = [
   { key: 'plan', label: '일정', icon: 'plan' },
@@ -36,12 +38,33 @@ export default function App() {
   // 지도 스크립트가 준비되면 아래 화면들이 추정치 대신 실제 데이터로 다시 그려진다
   const mapsReady = useMapsReady();
 
+  const share = useShare();
+  const readOnly = share.mode === 'readonly';
+
+  // 공유본 저장 뒤 화면이 새로고침되므로, 보던 탭·날짜·스크롤을 되돌려 준다
+  const restored = useMemo(() => takeUiState(), []);
   const todayIndex = useTodayIndex(trip.days);
-  const [tab, setTab] = useState<TabKey>('plan');
-  const [dayIndex, setDayIndex] = useState(todayIndex);
+  const [tab, setTab] = useState<TabKey>((restored?.tab as TabKey) ?? 'plan');
+  const [dayIndex, setDayIndex] = useState(restored?.dayIndex ?? todayIndex);
   const [foodAnchor, setFoodAnchor] = useState<string | undefined>(undefined);
   const [printing, setPrinting] = useState(false);
   const [mapsError, setMapsError] = useState<string | null>(null);
+
+  /* 공유 모드 판별 */
+  useEffect(() => {
+    void initShare();
+  }, []);
+
+  /* 현재 보고 있는 위치를 기록해 두었다가 새로고침 뒤 복원 */
+  useEffect(() => {
+    setUiSnapshot({ tab, dayIndex });
+  }, [tab, dayIndex]);
+
+  useEffect(() => {
+    if (!restored) return;
+    const id = window.setTimeout(() => window.scrollTo({ top: restored.scrollY }), 60);
+    return () => window.clearTimeout(id);
+  }, [restored]);
 
   /* 여행이 바뀌면 오늘 날짜로 되돌린다 */
   useEffect(() => {
@@ -107,13 +130,18 @@ export default function App() {
             오늘
           </button>
           <span className="navbar__title">{NAV_TITLE[tab]}</span>
-          <button type="button" className="navbar__action navbar__action--right" onClick={() => setPrinting(true)}>
-            <Icon name="printer" size={19} strokeWidth={1.9} />
-          </button>
+          <div className="navbar__action navbar__action--right">
+            <SaveChip />
+            <button type="button" onClick={() => setPrinting(true)} aria-label="PDF로 내보내기">
+              <Icon name="printer" size={19} strokeWidth={1.9} />
+            </button>
+          </div>
         </div>
       </nav>
 
       <main className="app__body">
+        <ShareNotice />
+
         {mapsError && (
           <div className="section">
             <div className="notice notice--warn">
@@ -133,6 +161,7 @@ export default function App() {
             bias={bias}
             onShowFood={openFood}
             onPrint={() => setPrinting(true)}
+            readOnly={readOnly}
           />
         )}
         {tab === 'map' && (
@@ -153,8 +182,8 @@ export default function App() {
             onAnchorChange={setFoodAnchor}
           />
         )}
-        {tab === 'cost' && <CostScreen trip={trip} settings={settings} />}
-        {tab === 'settings' && <SettingsScreen trip={trip} settings={settings} />}
+        {tab === 'cost' && <CostScreen trip={trip} settings={settings} readOnly={readOnly} />}
+        {tab === 'settings' && <SettingsScreen trip={trip} settings={settings} readOnly={readOnly} />}
       </main>
 
       <nav className="tabbar">

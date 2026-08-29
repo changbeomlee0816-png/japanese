@@ -10,6 +10,7 @@ import { Icon } from './Icon';
 interface Props {
   trip: Trip;
   settings: Settings;
+  readOnly?: boolean;
 }
 
 interface DayTotals {
@@ -21,7 +22,7 @@ interface DayTotals {
 
 const ZERO: DayTotals = { transit: 0, spend: 0, minutes: 0, byCategory: {} };
 
-export function CostScreen({ trip, settings }: Props) {
+export function CostScreen({ trip, settings, readOnly = false }: Props) {
   const [totals, setTotals] = useState<Record<string, DayTotals>>({});
 
   const report = useCallback((dayId: string, next: DayTotals) => {
@@ -125,6 +126,7 @@ export function CostScreen({ trip, settings }: Props) {
         </div>
       </div>
 
+      {!readOnly && (
       <div className="section">
         <div className="section__header"><span className="section__title">환율 · 인원</span></div>
         <div className="list">
@@ -174,6 +176,15 @@ export function CostScreen({ trip, settings }: Props) {
           숙박·항공권처럼 일정에 없는 비용은 포함되지 않습니다.
         </p>
       </div>
+      )}
+
+      {readOnly && (
+        <div className="section">
+          <p className="muted tiny" style={{ padding: '0 4px' }}>
+            교통비는 거리·이동수단 기반 추정치입니다. 숙박·항공권처럼 일정에 없는 비용은 포함되지 않습니다.
+          </p>
+        </div>
+      )}
     </>
   );
 }

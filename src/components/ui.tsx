@@ -1,5 +1,6 @@
 import { useEffect, useState, type ReactNode } from 'react';
 import { Icon, type IconName } from './Icon';
+import { holdPublishing } from '../lib/share';
 
 /* ── 시트 (아래에서 올라오는 모달) ────────────────────── */
 
@@ -23,9 +24,12 @@ export function Sheet({ open, title, onClose, children, confirmLabel, onConfirm,
     document.addEventListener('keydown', onKey);
     const prev = document.body.style.overflow;
     document.body.style.overflow = 'hidden';
+    // 편집 도중에 공유본이 발행되면 화면이 새로고침되므로 시트가 닫힐 때까지 미룬다
+    const release = holdPublishing();
     return () => {
       document.removeEventListener('keydown', onKey);
       document.body.style.overflow = prev;
+      release();
     };
   }, [open, onClose]);
 

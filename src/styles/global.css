@@ -55,11 +55,6 @@
   --safe-t: env(safe-area-inset-top, 0px);
 }
 
-:root[data-theme='dark'],
-:root:not([data-theme='light']) {
-  /* 아래 media 블록에서만 적용되도록 기본값은 라이트 유지 */
-}
-
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme='light']) {
     color-scheme: dark;
@@ -142,7 +137,7 @@ body {
   background: var(--bg);
   color: var(--label);
   font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'SF Pro Display', 'Pretendard Variable',
-    Pretendard, 'Apple SD Gothic Neo', 'Segoe UI', Roboto, 'Helvetica Neue', system-ui, sans-serif;
+    Pretendard, 'Apple SD Gothic Neo', 'Noto Sans KR', 'Segoe UI', Roboto, 'Helvetica Neue', system-ui, sans-serif;
   font-size: 17px;
   line-height: 1.45;
   letter-spacing: -0.012em;

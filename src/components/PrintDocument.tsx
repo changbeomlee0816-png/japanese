@@ -7,6 +7,8 @@ import { formatKRW, formatMoney, MODE_LABEL } from '../lib/fares';
 import { nearbyRestaurants } from '../lib/maps';
 import { Icon } from './Icon';
 import { Switch } from './ui';
+import { saveFile } from '../lib/share';
+import printCss from '../styles/print.css?raw';
 
 interface Props {
   trip: Trip;
@@ -22,6 +24,39 @@ interface Props {
 export function PrintPreview({ trip, enabled, onClose }: Props) {
   const [withFood, setWithFood] = useState(true);
   const [dayTotals, setDayTotals] = useState<Record<string, { transit: number; spend: number }>>({});
+  const [saveNote, setSaveNote] = useState<string | null>(null);
+
+  /**
+   * 인쇄 창이 뜨지 않는 환경(공유 링크의 프레임 안 등)을 위한 대비책.
+   * 지금 보고 있는 일정표를 그대로 담은 HTML 파일을 건네준다.
+   * 열어서 인쇄하면 같은 PDF가 나온다.
+   */
+  const downloadDocument = async () => {
+    const paper = document.getElementById('print-root')?.outerHTML;
+    if (!paper) return;
+    const doc = [
+      '<!doctype html>',
+      '<html lang="ko"><head><meta charset="UTF-8">',
+      '<meta name="viewport" content="width=device-width, initial-scale=1">',
+      `<title>${trip.title} 일정표</title>`,
+      '<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;600;700&display=swap">',
+      '<style>body{margin:0;padding:24px 12px;background:#f2f2f7;font-family:-apple-system,BlinkMacSystemFont,\'Apple SD Gothic Neo\',\'Noto Sans KR\',system-ui,sans-serif;-webkit-font-smoothing:antialiased}',
+      '*{box-sizing:border-box}@media print{body{padding:0;background:#fff}}',
+      printCss,
+      '</style></head><body>',
+      paper,
+      '</body></html>',
+    ].join('\n');
+
+    const result = await saveFile(`${trip.title.replace(/[\\/:*?"<>|]/g, '')} 일정표.html`, doc);
+    setSaveNote(
+      result === 'saved'
+        ? '내려받은 파일을 열고 인쇄(⌘P / Ctrl+P) → PDF로 저장하면 됩니다.'
+        : result === 'declined'
+          ? '저장을 취소했습니다.'
+          : '이 화면에서는 파일을 내려받을 수 없습니다.',
+    );
+  };
 
   const grand = useMemo(() => {
     let transit = 0;
@@ -49,9 +84,15 @@ export function PrintPreview({ trip, enabled, onClose }: Props) {
         <span className="small">주변 맛집 추천 포함</span>
         <Switch checked={withFood} onChange={setWithFood} label="맛집 포함" />
       </div>
-      <p className="muted tiny print-hint">
-        저장 대화상자에서 대상을 <strong>&lsquo;PDF로 저장&rsquo;</strong>으로 선택하세요. 배경 그래픽을 켜면 색이 그대로 나옵니다.
-      </p>
+      <div className="print-hint">
+        <p className="muted tiny" style={{ margin: 0 }}>
+          저장 대화상자에서 대상을 <strong>&lsquo;PDF로 저장&rsquo;</strong>으로 선택하세요. 배경 그래픽을 켜면 색이 그대로 나옵니다.
+        </p>
+        <button type="button" className="btn btn--gray btn--sm" onClick={() => void downloadDocument()}>
+          <Icon name="share" size={14} strokeWidth={2} /> 인쇄 창이 안 뜨면 파일로 내려받기
+        </button>
+        {saveNote && <p className="muted tiny" style={{ margin: 0 }}>{saveNote}</p>}
+      </div>
 
       <div className="paper" id="print-root">
         <header className="paper__cover">

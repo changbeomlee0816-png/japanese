@@ -5,15 +5,17 @@ import { clearLegCache } from '../store/useLegs';
 import { mapsLoaded } from '../lib/maps';
 import { DEFAULT_RATE_TO_KRW } from '../lib/fares';
 import { todayISO } from '../lib/time';
+import { saveFile } from '../lib/share';
 import { Row, Sheet, Switch, Segmented } from './ui';
 import { Icon } from './Icon';
 
 interface Props {
   trip: Trip;
   settings: Settings;
+  readOnly?: boolean;
 }
 
-export function SettingsScreen({ trip, settings }: Props) {
+export function SettingsScreen({ trip, settings, readOnly = false }: Props) {
   const { trips } = useStore();
   const [keyDraft, setKeyDraft] = useState(settings.googleMapsApiKey);
   const [tripSheet, setTripSheet] = useState(false);
@@ -36,14 +38,9 @@ export function SettingsScreen({ trip, settings }: Props) {
     if (perm !== 'granted') alert('브라우저에서 알림이 차단되어 있습니다.');
   };
 
-  const exportData = () => {
-    const blob = new Blob([actions.exportState()], { type: 'application/json' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `tabi-${todayISO()}.json`;
-    a.click();
-    URL.revokeObjectURL(url);
+  const exportData = async () => {
+    const result = await saveFile(`tabi-${todayISO()}.json`, actions.exportState());
+    if (result === 'unavailable') alert('이 화면에서는 파일을 내려받을 수 없습니다.');
   };
 
   const importData = (file: File) => {
@@ -173,22 +170,26 @@ export function SettingsScreen({ trip, settings }: Props) {
         />
       </div>
 
-      <div className="section">
-        <div className="section__header">
-          <span className="section__title">여행</span>
-          <button type="button" className="section__action" onClick={() => setNewTrip(true)}>새 여행</button>
+      {!readOnly && (
+        <div className="section">
+          <div className="section__header">
+            <span className="section__title">여행</span>
+            <button type="button" className="section__action" onClick={() => setNewTrip(true)}>새 여행</button>
+          </div>
+          <div className="list">
+            <Row label="현재 여행" value={trip.title} onClick={() => setTripSheet(true)} />
+            <Row label="저장된 여행" value={`${trips.length}개`} onClick={() => setTripSheet(true)} />
+          </div>
         </div>
-        <div className="list">
-          <Row label="현재 여행" value={trip.title} onClick={() => setTripSheet(true)} />
-          <Row label="저장된 여행" value={`${trips.length}개`} onClick={() => setTripSheet(true)} />
-        </div>
-      </div>
+      )}
 
       <div className="section">
         <div className="section__header"><span className="section__title">데이터</span></div>
         <div className="list">
-          <Row label="백업 파일 내보내기" icon="share" accent onClick={exportData} />
-          <Row label="백업 파일 가져오기" icon="copy" accent onClick={() => fileRef.current?.click()} />
+          <Row label="백업 파일 내보내기" icon="share" accent onClick={() => void exportData()} />
+          {!readOnly && (
+            <Row label="백업 파일 가져오기" icon="copy" accent onClick={() => fileRef.current?.click()} />
+          )}
         </div>
         <input
           ref={fileRef}

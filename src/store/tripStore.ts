@@ -5,6 +5,7 @@ import { addDaysISO, addMinutes, todayISO, toMinutes } from '../lib/time';
 import { createSampleTrip } from '../lib/sample';
 import { defaultDuration, parsePlanText } from '../lib/parsePlan';
 import { DEFAULT_RATE_TO_KRW } from '../lib/fares';
+import { isPublishable, knownReadOnly, markDirty, readEmbeddedState } from '../lib/share';
 
 const TRIP_KEY = 'tabi.trips.v1';
 const ACTIVE_KEY = 'tabi.activeTripId.v1';
@@ -46,14 +47,34 @@ function writeJSON(key: string, value: unknown) {
   }
 }
 
+function latestUpdate(trips: Trip[]): string {
+  return trips.reduce((max, t) => (t.updatedAt > max ? t.updatedAt : max), '');
+}
+
+/**
+ * 초기 상태를 고른다.
+ *
+ * 공유(Artifact) 모드에서는 문서에 심어둔 일정이 정본이다. 다만 직전 방문에서
+ * 발행하지 못하고 남은 로컬 편집이 더 최신이면 그쪽을 살려 두고 다시 발행하게 한다.
+ * 읽기 전용 뷰에서는 항상 공유본을 그대로 보여준다 — 안 그러면 나만 다른 화면을 보게 된다.
+ */
 function loadInitial(): State {
-  const trips = readJSON<Trip[]>(TRIP_KEY, []);
-  if (trips.length === 0) {
-    const sample = createSampleTrip();
-    trips.push(sample);
+  const localTrips = readJSON<Trip[]>(TRIP_KEY, []);
+  const embedded = isPublishable() ? readEmbeddedState() : null;
+
+  let trips: Trip[];
+  if (embedded) {
+    const localIsNewer =
+      !knownReadOnly() && localTrips.length > 0 && latestUpdate(localTrips) > embedded.publishedAt;
+    trips = localIsNewer ? localTrips : embedded.trips;
+  } else if (localTrips.length > 0) {
+    trips = localTrips;
+  } else {
+    trips = [createSampleTrip()];
     writeJSON(TRIP_KEY, trips);
-    writeJSON(ACTIVE_KEY, sample.id);
+    writeJSON(ACTIVE_KEY, trips[0].id);
   }
+
   const storedActive = readJSON<string>(ACTIVE_KEY, '');
   const activeTripId = trips.some((t) => t.id === storedActive) ? storedActive : trips[0].id;
   return {
@@ -71,10 +92,13 @@ function emit() {
 }
 
 function set(updater: (prev: State) => State) {
+  const prev = state;
   state = updater(state);
   writeJSON(TRIP_KEY, state.trips);
   writeJSON(ACTIVE_KEY, state.activeTripId);
   writeJSON(SETTINGS_KEY, state.settings);
+  // 설정(구글맵 키 포함)은 절대 발행하지 않는다. 여행 데이터가 바뀐 경우에만 공유본을 갱신한다.
+  if (state.trips !== prev.trips) markDirty(state.trips);
   emit();
 }
 

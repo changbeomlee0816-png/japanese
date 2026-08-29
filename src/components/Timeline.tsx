@@ -31,9 +31,10 @@ interface StopProps {
   onFindPlace: () => void;
   onShowFood: () => void;
   dragProps: React.HTMLAttributes<HTMLElement>;
+  readOnly: boolean;
 }
 
-function Stop({ item, index, dayId, currency, live, isLiveDay, onEdit, onFindPlace, onShowFood, dragProps }: StopProps) {
+function Stop({ item, index, dayId, currency, live, isLiveDay, onEdit, onFindPlace, onShowFood, dragProps, readOnly }: StopProps) {
   const meta = CATEGORY[item.category];
   const status = live?.status ?? 'upcoming';
   const showLive = isLiveDay && !item.done;
@@ -53,7 +54,7 @@ function Stop({ item, index, dayId, currency, live, isLiveDay, onEdit, onFindPla
           type="button"
           className="stop__dot"
           style={{ '--dot': meta.color } as React.CSSProperties}
-          onClick={() => actions.setDone(dayId, item.id, !item.done)}
+          onClick={() => !readOnly && actions.setDone(dayId, item.id, !item.done)}
           aria-label={item.done ? '완료 취소' : '완료 표시'}
           title={item.done ? '완료 취소' : '완료 표시'}
         >
@@ -63,7 +64,7 @@ function Stop({ item, index, dayId, currency, live, isLiveDay, onEdit, onFindPla
       </div>
 
       <div className="stop__card">
-        <button type="button" className="stop__main" onClick={onEdit}>
+        <button type="button" className="stop__main" onClick={readOnly ? onShowFood : onEdit}>
           <div className="stop__head">
             <span className="stop__index">{index + 1}</span>
             <h3 className="stop__title">{item.title}</h3>
@@ -89,7 +90,7 @@ function Stop({ item, index, dayId, currency, live, isLiveDay, onEdit, onFindPla
           {item.place.coord ? (
             item.place.address && <p className="stop__addr">{item.place.address}</p>
           ) : (
-            <p className="stop__addr stop__addr--missing">위치 미확인 — 탭해서 장소를 찾아주세요</p>
+            !readOnly && <p className="stop__addr stop__addr--missing">위치 미확인 — 탭해서 장소를 찾아주세요</p>
           )}
 
           {item.notes && <p className="stop__notes">{item.notes}</p>}
@@ -102,7 +103,7 @@ function Stop({ item, index, dayId, currency, live, isLiveDay, onEdit, onFindPla
         </button>
 
         <div className="stop__actions">
-          {!item.place.coord && (
+          {!item.place.coord && !readOnly && (
             <button type="button" className="btn btn--tinted btn--sm" onClick={onFindPlace}>
               <Icon name="search" size={14} strokeWidth={2} /> 위치 찾기
             </button>
@@ -110,7 +111,7 @@ function Stop({ item, index, dayId, currency, live, isLiveDay, onEdit, onFindPla
           <button type="button" className="btn btn--gray btn--sm" onClick={onShowFood}>
             <Icon name="food" size={14} strokeWidth={2} /> 주변 맛집
           </button>
-          {isLiveDay && !item.done && (
+          {isLiveDay && !item.done && !readOnly && (
             <button
               type="button"
               className="btn btn--gray btn--sm"
@@ -121,9 +122,11 @@ function Stop({ item, index, dayId, currency, live, isLiveDay, onEdit, onFindPla
             </button>
           )}
           <span className="spacer" />
-          <span className="stop__grip" aria-hidden>
-            <Icon name="drag" size={18} strokeWidth={2.4} color="var(--label-3)" />
-          </span>
+          {!readOnly && (
+            <span className="stop__grip" aria-hidden>
+              <Icon name="drag" size={18} strokeWidth={2.4} color="var(--label-3)" />
+            </span>
+          )}
         </div>
       </div>
     </article>
@@ -140,12 +143,14 @@ function LegBlock({
   dayId,
   fromItem,
   gapMin,
+  readOnly,
 }: {
   leg: Leg | null;
   currency: string;
   dayId: string;
   fromItem: Item;
   gapMin: number;
+  readOnly: boolean;
 }) {
   const [open, setOpen] = useState(false);
 
@@ -185,19 +190,21 @@ function LegBlock({
 
         {open && (
           <div className="leg__detail">
-            <div className="leg__modes">
-              {MODES.map((m) => (
-                <button
-                  key={m}
-                  type="button"
-                  className={`leg__mode${leg.mode === m ? ' leg__mode--active' : ''}`}
-                  onClick={() => actions.setItemMode(dayId, fromItem.id, m)}
-                >
-                  <Icon name={MODE_ICON[m]} size={15} strokeWidth={2} />
-                  {MODE_LABEL[m]}
-                </button>
-              ))}
-            </div>
+            {!readOnly && (
+              <div className="leg__modes">
+                {MODES.map((m) => (
+                  <button
+                    key={m}
+                    type="button"
+                    className={`leg__mode${leg.mode === m ? ' leg__mode--active' : ''}`}
+                    onClick={() => actions.setItemMode(dayId, fromItem.id, m)}
+                  >
+                    <Icon name={MODE_ICON[m]} size={15} strokeWidth={2} />
+                    {MODE_LABEL[m]}
+                  </button>
+                ))}
+              </div>
+            )}
 
             {leg.summary && <p className="leg__summary">{leg.summary}</p>}
 
@@ -245,9 +252,10 @@ interface TimelineProps {
   onEditItem: (item: Item) => void;
   onFindPlace: (item: Item) => void;
   onShowFood: (item: Item) => void;
+  readOnly?: boolean;
 }
 
-export function Timeline({ day, legs, currency, liveStates, isLiveDay, onEditItem, onFindPlace, onShowFood }: TimelineProps) {
+export function Timeline({ day, legs, currency, liveStates, isLiveDay, onEditItem, onFindPlace, onShowFood, readOnly = false }: TimelineProps) {
   const [dragIndex, setDragIndex] = useState<number | null>(null);
   const [overIndex, setOverIndex] = useState<number | null>(null);
 
@@ -271,8 +279,9 @@ export function Timeline({ day, legs, currency, liveStates, isLiveDay, onEditIte
               onEdit={() => onEditItem(item)}
               onFindPlace={() => onFindPlace(item)}
               onShowFood={() => onShowFood(item)}
+              readOnly={readOnly}
               dragProps={{
-                draggable: true,
+                draggable: !readOnly,
                 onDragStart: () => setDragIndex(i),
                 onDragEnd: () => {
                   setDragIndex(null);
@@ -297,6 +306,7 @@ export function Timeline({ day, legs, currency, liveStates, isLiveDay, onEditIte
                 dayId={day.id}
                 fromItem={item}
                 gapMin={gapMin}
+                readOnly={readOnly}
               />
             )}
           </div>
