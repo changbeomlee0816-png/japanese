@@ -1075,3 +1075,372 @@
   gap: 6px;
   flex-wrap: wrap;
 }
+
+/* ── 지역 선택 ───────────────────────────────────────── */
+
+.region-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 10px;
+}
+
+.region-card {
+  position: relative;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 3px;
+  padding: 16px 14px 14px;
+  border-radius: var(--r-lg);
+  background: var(--card);
+  box-shadow: var(--shadow-1);
+  text-align: left;
+  min-height: 118px;
+  transition: transform 0.15s var(--ease-spring);
+}
+
+.region-card:active {
+  transform: scale(0.96);
+}
+
+/* 지역마다 고유한 색 얼룩 — 카드가 서로 구별된다 */
+.region-card__glow {
+  position: absolute;
+  inset: -40% 30% 55% -25%;
+  background: radial-gradient(circle at 30% 40%, var(--hue), transparent 70%);
+  opacity: 0.22;
+  pointer-events: none;
+}
+
+.region-card__name {
+  font-size: 19px;
+  font-weight: 700;
+  letter-spacing: -0.025em;
+  position: relative;
+}
+
+.region-card__blurb {
+  font-size: 12px;
+  line-height: 1.4;
+  color: var(--label-2);
+  flex: 1;
+  position: relative;
+}
+
+.region-card__meta {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--hue);
+  position: relative;
+}
+
+.picked-region {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  text-align: left;
+  padding: 14px;
+  border-radius: var(--r-md);
+  background: var(--card);
+  box-shadow: var(--shadow-1);
+}
+
+.picked-region__dot {
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  background: var(--hue);
+  flex-shrink: 0;
+  opacity: 0.85;
+}
+
+.picked-region span:nth-child(2) {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+}
+
+.picked-region em {
+  font-style: normal;
+}
+
+.daycount-row {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.daycount {
+  flex: 1;
+  min-width: 44px;
+  padding: 10px 4px;
+  border-radius: var(--r-sm);
+  background: var(--card);
+  box-shadow: var(--shadow-1);
+  font-size: 14px;
+  font-weight: 600;
+  transition: background 0.15s var(--ease), color 0.15s var(--ease);
+}
+
+.daycount--active {
+  background: var(--blue);
+  color: #fff;
+}
+
+/* ── 둘러보기 ────────────────────────────────────────── */
+
+.spot-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.spot {
+  background: var(--card);
+  border-radius: var(--r-lg);
+  box-shadow: var(--shadow-1);
+  padding: 14px;
+}
+
+.spot--planned {
+  opacity: 0.62;
+}
+
+.spot__head {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+}
+
+.spot__icon {
+  width: 36px;
+  height: 36px;
+  border-radius: 11px;
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+}
+
+.spot__title {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.spot__title h3 {
+  margin: 0;
+  font-size: 16.5px;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+}
+
+.spot__blurb {
+  margin: 10px 0 0;
+  font-size: 14px;
+  line-height: 1.5;
+  color: var(--label-2);
+}
+
+.spot__tags {
+  display: flex;
+  gap: 5px;
+  flex-wrap: wrap;
+  margin-top: 9px;
+}
+
+.spot__actions {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  margin-top: 12px;
+  flex-wrap: wrap;
+}
+
+.spot__days {
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 0.5px solid var(--separator);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  align-items: flex-start;
+}
+
+.spot__daybtns {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+/* ── 전체 일정 개요 ──────────────────────────────────── */
+
+.overview {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.ovday {
+  width: 100%;
+  text-align: left;
+  background: var(--card);
+  border-radius: var(--r-lg);
+  box-shadow: var(--shadow-1);
+  padding: 14px;
+  transition: transform 0.14s var(--ease);
+}
+
+.ovday:active {
+  transform: scale(0.985);
+}
+
+.ovday--today {
+  box-shadow: 0 0 0 1.5px color-mix(in srgb, var(--green) 50%, transparent), var(--shadow-1);
+}
+
+.ovday--empty {
+  background: color-mix(in srgb, var(--fill) 55%, var(--card));
+  box-shadow: none;
+}
+
+.ovday__head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.ovday__num {
+  font-size: 16px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+}
+
+.ovday__date {
+  font-size: 13px;
+  color: var(--label-2);
+}
+
+.ovday__subtitle {
+  margin: 4px 0 0;
+  font-size: 13px;
+  color: var(--label-2);
+}
+
+.ovday__blank {
+  margin: 10px 0 0;
+  font-size: 13.5px;
+  color: var(--label-3);
+}
+
+.ovday__items {
+  list-style: none;
+  margin: 11px 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.ovday__items li {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.ovday__dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.ovday__time {
+  font-size: 12px;
+  color: var(--label-2);
+  width: 38px;
+  flex-shrink: 0;
+}
+
+.ovday__name {
+  font-size: 14px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ovday__foot {
+  display: flex;
+  gap: 5px;
+  margin-top: 11px;
+  padding-top: 10px;
+  border-top: 0.5px solid var(--separator);
+  font-size: 12px;
+  color: var(--label-2);
+}
+
+.overview__actions {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 4px;
+}
+
+/* ── 가고 싶은 곳 ────────────────────────────────────── */
+
+.saved-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.saved {
+  background: var(--card);
+  border-radius: var(--r-md);
+  box-shadow: var(--shadow-1);
+  padding: 11px 13px;
+}
+
+.saved--placing {
+  box-shadow: 0 0 0 1.5px color-mix(in srgb, var(--blue) 45%, transparent), var(--shadow-1);
+}
+
+.saved__row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.saved__dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.saved__body {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.saved__body strong {
+  font-size: 15px;
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.saved__days {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 0.5px solid var(--separator);
+}

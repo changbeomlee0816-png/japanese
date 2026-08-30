@@ -4,6 +4,7 @@ import { actions, useActiveTrip, useSettings } from './store/tripStore';
 import { useTodayIndex } from './store/useLive';
 import { loadGoogleMaps, useMapsReady } from './lib/maps';
 import { lookupArea } from './data/poi';
+import { findRegion, regionById } from './data/regions';
 import { PlanScreen } from './components/PlanScreen';
 import { MapScreen } from './components/MapScreen';
 import { FoodScreen } from './components/FoodScreen';
@@ -104,7 +105,9 @@ export default function App() {
   /* 지도·검색의 지역 기준점 */
   const bias = useMemo(() => {
     const withCoord = trip.days.flatMap((d) => d.items).find((i) => i.place.coord);
-    return withCoord?.place.coord ?? lookupArea(trip.destination) ?? undefined;
+    if (withCoord?.place.coord) return withCoord.place.coord;
+    const region = (trip.regionId ? regionById(trip.regionId) : undefined) ?? findRegion(trip.destination);
+    return region?.center ?? lookupArea(trip.destination) ?? undefined;
   }, [trip]);
 
   const openFood = (item: Item) => {

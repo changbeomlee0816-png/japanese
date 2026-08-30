@@ -12,7 +12,10 @@ import { LiveBanner } from './LiveBanner';
 import { DayPicker } from './DayPicker';
 import { ItemEditSheet } from './ItemEditSheet';
 import { QuickAddSheet } from './QuickAddSheet';
-import { EmptyState, Row, Sheet } from './ui';
+import { EmptyState, Row, Segmented, Sheet } from './ui';
+import { ExploreSheet } from './ExploreSheet';
+import { TripOverview } from './TripOverview';
+import { SavedShelf } from './SavedShelf';
 import { Icon } from './Icon';
 
 interface Props {
@@ -36,6 +39,9 @@ export function PlanScreen({ trip, settings, dayIndex, onDayChange, bias, onShow
 
   const [editing, setEditing] = useState<{ item: Item | null; focusPlace?: boolean } | null>(null);
   const [quickAdd, setQuickAdd] = useState(false);
+  const [explore, setExplore] = useState(false);
+  /** 전체 윤곽을 먼저 보고 하루를 파고드는 흐름 */
+  const [view, setView] = useState<'overview' | 'day'>('overview');
   const [dayMenu, setDayMenu] = useState(false);
   const [resolving, setResolving] = useState<string | null>(null);
   /** 붙여넣기 직후 이동할 날짜 — 스토어가 갱신된 뒤에야 인덱스를 알 수 있다 */
@@ -98,6 +104,47 @@ export function PlanScreen({ trip, settings, dayIndex, onDayChange, bias, onShow
         </p>
       </div>
 
+      <div className="section">
+        <Segmented
+          value={view}
+          onChange={setView}
+          options={[
+            { value: 'overview', label: '전체 일정' },
+            { value: 'day', label: '하루씩 보기' },
+          ]}
+        />
+      </div>
+
+      {view === 'overview' ? (
+        <>
+          <TripOverview
+            trip={trip}
+            readOnly={readOnly}
+            onExplore={() => setExplore(true)}
+            onOpenDay={(i) => {
+              onDayChange(i);
+              setView('day');
+            }}
+          />
+          {!readOnly && <SavedShelf trip={trip} dayIndex={dayIndex} onExplore={() => setExplore(true)} />}
+          {!readOnly && (
+            <div className="section">
+              <div className="list">
+                <Row label="메모한 일정 붙여넣기" icon="sparkles" accent onClick={() => setQuickAdd(true)} />
+                <Row label="PDF로 내보내기" icon="printer" accent onClick={onPrint} />
+              </div>
+            </div>
+          )}
+          {readOnly && (
+            <div className="section">
+              <div className="list">
+                <Row label="PDF로 내보내기" icon="printer" accent onClick={onPrint} />
+              </div>
+            </div>
+          )}
+        </>
+      ) : (
+      <>
       <DayPicker trip={trip} index={dayIndex} onChange={onDayChange} allowAdd={!readOnly} />
 
       <div className="section">
@@ -179,15 +226,18 @@ export function PlanScreen({ trip, settings, dayIndex, onDayChange, bias, onShow
             body={
               readOnly
                 ? '이 날짜에는 아직 등록된 일정이 없습니다.'
-                : '가고 싶은 곳을 하나씩 넣거나,\n메모해 둔 일정을 그대로 붙여넣으세요.'
+                : '이 지역을 둘러보며 담거나,\n메모해 둔 일정을 그대로 붙여넣으세요.'
             }
             action={
               readOnly ? undefined : (
-                <div style={{ display: 'flex', gap: 8, justifyContent: 'center' }}>
-                  <button className="btn btn--primary" type="button" onClick={() => setEditing({ item: null })}>
-                    일정 추가
+                <div style={{ display: 'flex', gap: 8, justifyContent: 'center', flexWrap: 'wrap' }}>
+                  <button className="btn btn--primary" type="button" onClick={() => setExplore(true)}>
+                    둘러보고 담기
                   </button>
-                  <button className="btn btn--tinted" type="button" onClick={() => setQuickAdd(true)}>
+                  <button className="btn btn--tinted" type="button" onClick={() => setEditing({ item: null })}>
+                    직접 추가
+                  </button>
+                  <button className="btn btn--gray" type="button" onClick={() => setQuickAdd(true)}>
                     붙여넣기
                   </button>
                 </div>
@@ -209,16 +259,21 @@ export function PlanScreen({ trip, settings, dayIndex, onDayChange, bias, onShow
         )}
       </div>
 
+      {!readOnly && <SavedShelf trip={trip} dayIndex={dayIndex} onExplore={() => setExplore(true)} />}
+
       {day.items.length > 0 && (
         <div className="section">
           <div className="list">
-            {!readOnly && <Row label="일정 붙여넣기" icon="sparkles" accent onClick={() => setQuickAdd(true)} />}
+            {!readOnly && <Row label="이 지역 둘러보기" icon="sparkles" accent onClick={() => setExplore(true)} />}
+            {!readOnly && <Row label="메모한 일정 붙여넣기" icon="plan" accent onClick={() => setQuickAdd(true)} />}
             <Row label="PDF로 내보내기" icon="printer" accent onClick={onPrint} />
           </div>
         </div>
       )}
+      </>
+      )}
 
-      {!readOnly && (
+      {!readOnly && view === 'day' && (
         <button className="fab" type="button" onClick={() => setEditing({ item: null })} aria-label="일정 추가">
           <Icon name="plus" size={26} strokeWidth={2.4} />
         </button>
@@ -235,6 +290,8 @@ export function PlanScreen({ trip, settings, dayIndex, onDayChange, bias, onShow
           onClose={() => setEditing(null)}
         />
       )}
+
+      <ExploreSheet open={explore} trip={trip} dayIndex={dayIndex} onClose={() => setExplore(false)} />
 
       <QuickAddSheet
         open={quickAdd}
