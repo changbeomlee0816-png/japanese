@@ -5,7 +5,7 @@ import { actions } from '../store/tripStore';
 import { currencySymbol } from '../lib/fares';
 import { formatDateShort } from '../lib/time';
 import { defaultDuration } from '../lib/parsePlan';
-import { Sheet, Row } from './ui';
+import { Sheet, Row, Switch } from './ui';
 import { PlaceSearch } from './PlaceSearch';
 import { Icon } from './Icon';
 
@@ -31,6 +31,7 @@ export function ItemEditSheet({ open, trip, day, item, bias, onClose, focusPlace
   const [cost, setCost] = useState(0);
   const [notes, setNotes] = useState('');
   const [place, setPlace] = useState<PlaceRef | null>(null);
+  const [pinned, setPinned] = useState(false);
   const [searching, setSearching] = useState(false);
 
   useEffect(() => {
@@ -42,6 +43,7 @@ export function ItemEditSheet({ open, trip, day, item, bias, onClose, focusPlace
     setCost(item?.cost ?? 0);
     setNotes(item?.notes ?? '');
     setPlace(item?.place ?? null);
+    setPinned(!!item?.pinned);
     setSearching(!!focusPlace || (!item && true));
   }, [open, item, day, focusPlace]);
 
@@ -55,6 +57,7 @@ export function ItemEditSheet({ open, trip, day, item, bias, onClose, focusPlace
       durationMin,
       cost,
       notes: notes.trim() || undefined,
+      pinned,
       place: place ?? { name: title.trim() },
     };
     if (item) actions.updateItem(day.id, item.id, payload);
@@ -168,6 +171,13 @@ export function ItemEditSheet({ open, trip, day, item, bias, onClose, focusPlace
                   ))}
                   {!DURATIONS.includes(durationMin) && <option value="custom">{durationMin}분</option>}
                 </select>
+              </div>
+              <div className="field">
+                <span className="field__label">시각 고정</span>
+                <span className="input muted small" style={{ textAlign: 'left' }}>
+                  예약이 있어 순서를 바꾸면 안 될 때
+                </span>
+                <Switch checked={pinned} onChange={setPinned} label="시각 고정" />
               </div>
               <div className="field">
                 <span className="field__label">예상 비용</span>

@@ -7,6 +7,7 @@ import { defaultDuration, parsePlanText } from '../lib/parsePlan';
 import { DEFAULT_RATE_TO_KRW } from '../lib/fares';
 import { regionById } from '../data/regions';
 import type { PoiEntry } from '../data/poi';
+import { optimizeDay } from '../lib/optimize';
 import { isPublishable, knownReadOnly, markDirty, readEmbeddedState } from '../lib/share';
 import { markDirty as cloudMarkDirty } from '../lib/cloud';
 
@@ -477,6 +478,26 @@ export const actions = {
         }),
       };
     });
+  },
+
+  /** 동선 최적화 결과를 실제로 적용한다 (시각은 순서에 맞춰 다시 배분) */
+  applyOptimizedOrder(dayId: string) {
+    mapActiveTrip((trip) =>
+      mapDay(trip, dayId, (day) => {
+        const result = optimizeDay(day);
+        if (result.savedM <= 0) return day;
+        return { ...day, items: redistributeTimes(result.items) };
+      }),
+    );
+  },
+
+  togglePinned(dayId: string, itemId: string) {
+    mapActiveTrip((trip) =>
+      mapDay(trip, dayId, (day) => ({
+        ...day,
+        items: day.items.map((i) => (i.id === itemId ? { ...i, pinned: !i.pinned } : i)),
+      })),
+    );
   },
 
   /** 특정 항목 이후의 모든 일정을 delta분 만큼 민다 */

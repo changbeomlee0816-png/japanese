@@ -4,9 +4,11 @@ import { formatDateShort, formatDuration, todayISO } from '../lib/time';
 import { formatMoney } from '../lib/fares';
 import { actions } from '../store/tripStore';
 import { Icon } from './Icon';
+import { weatherEmoji, type DayWeather } from '../lib/weather';
 
 interface Props {
   trip: Trip;
+  weather?: Map<string, DayWeather>;
   onOpenDay: (index: number) => void;
   onExplore: () => void;
   readOnly?: boolean;
@@ -18,7 +20,7 @@ interface Props {
  * 하루씩만 보면 여행 전체 윤곽이 안 잡힌다는 문제 때문에 만들었다.
  * 날짜별로 몇 곳을 도는지, 비어 있는 날은 어디인지가 바로 보인다.
  */
-export function TripOverview({ trip, onOpenDay, onExplore, readOnly }: Props) {
+export function TripOverview({ trip, weather, onOpenDay, onExplore, readOnly }: Props) {
   const today = todayISO();
 
   return (
@@ -28,6 +30,7 @@ export function TripOverview({ trip, onOpenDay, onExplore, readOnly }: Props) {
           const spend = day.items.reduce((n, it) => n + it.cost, 0);
           const minutes = day.items.reduce((n, it) => n + it.durationMin, 0);
           const isToday = day.date === today;
+          const w = weather?.get(day.date);
           const empty = day.items.length === 0;
 
           return (
@@ -42,6 +45,11 @@ export function TripOverview({ trip, onOpenDay, onExplore, readOnly }: Props) {
                 <span className="ovday__date">{formatDateShort(day.date)}</span>
                 {isToday && <span className="badge badge--green">오늘</span>}
                 <span className="spacer" />
+                {w && (
+                  <span className="ovday__weather" title={`최고 ${w.maxC}° 최저 ${w.minC}° · 강수 ${w.rainPct}%`}>
+                    {weatherEmoji(w.code)} {w.maxC}°
+                  </span>
+                )}
                 <Icon name="chevronRight" size={15} strokeWidth={2.2} className="chevron" />
               </div>
 
