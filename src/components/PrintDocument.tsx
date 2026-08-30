@@ -248,8 +248,13 @@ function PrintDay({
                   <tr className="paper__legrow">
                     <td />
                     <td colSpan={4}>
-                      ↓ {MODE_LABEL[leg.mode]} {formatDuration(leg.durationMin)} · {(leg.distanceM / 1000).toFixed(1)}km ·{' '}
-                      {leg.fare > 0 ? formatMoney(leg.fare, trip.currency) : '무료'}
+                      ↓ {leg.label ?? MODE_LABEL[leg.mode]} {formatDuration(leg.durationMin)} ·{' '}
+                      {(leg.distanceM / 1000).toFixed(1)}km ·{' '}
+                      {leg.fare > 0
+                        ? formatMoney(leg.fare, trip.currency)
+                        : leg.fareUnknown
+                          ? '요금 미입력'
+                          : '무료'}
                       {leg.summary ? ` · ${leg.summary}` : ''}
                       {leg.source === 'estimate' ? ' (추정)' : ''}
                     </td>

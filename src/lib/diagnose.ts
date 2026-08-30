@@ -47,9 +47,7 @@ export function diagnoseDay(day: Day, legs: Array<Leg | null>): Diagnosis {
   const items = day.items;
 
   const distanceM = totalDistance(items);
-  const travelMin =
-    legs.reduce((n, l) => n + (l?.durationMin ?? 0), 0) +
-    items.reduce((n, i) => n + (i.transport ? i.durationMin : 0), 0);
+  const travelMin = legs.reduce((n, l) => n + (l?.durationMin ?? 0), 0);
 
   let spanMin = 0;
   if (items.length > 0) {
@@ -75,7 +73,6 @@ export function diagnoseDay(day: Day, legs: Array<Leg | null>): Diagnosis {
   // 2) 영업시간 밖 방문
   const weekday = dateTimeOf(day.date, '12:00').getDay();
   for (const item of items) {
-    if (item.transport) continue;
     const poi = lookupPoi(item.place.name || item.title);
     const hours = poi?.hours;
     if (!hours) continue;

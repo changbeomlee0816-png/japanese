@@ -30,6 +30,13 @@ export interface PoiEntry {
 }
 
 export const POI: PoiEntry[] = [
+  // ── 출발지 (한국) ────────────────────────────────────
+  { name: '인천국제공항', coord: { lat: 37.4602, lng: 126.4407 }, area: '인천', regionId: 'korea', category: 'transport', stayMin: 0, aliases: ['인천공항', 'incheon', 'icn', '인천국제공항 제1터미널', '인천국제공항 제2터미널'] },
+  { name: '김포국제공항', coord: { lat: 37.5583, lng: 126.7906 }, area: '서울', regionId: 'korea', category: 'transport', stayMin: 0, aliases: ['김포공항', 'gimpo', 'gmp'] },
+  { name: '김해국제공항', coord: { lat: 35.1795, lng: 128.9382 }, area: '부산', regionId: 'korea', category: 'transport', stayMin: 0, aliases: ['김해공항', 'gimhae', 'pus', '부산공항'] },
+  { name: '제주국제공항', coord: { lat: 33.5113, lng: 126.4930 }, area: '제주', regionId: 'korea', category: 'transport', stayMin: 0, aliases: ['제주공항', 'jeju', 'cju'] },
+  { name: '부산항 국제여객터미널', coord: { lat: 35.1147, lng: 129.0421 }, area: '부산', regionId: 'korea', category: 'transport', stayMin: 0, aliases: ['부산항', '부산 국제여객터미널', 'busan port'] },
+
   // ── 도쿄 ─────────────────────────────────────────────
   { name: '나리타 국제공항', coord: { lat: 35.772, lng: 140.3929 }, area: '도쿄', regionId: 'tokyo', category: 'transport', stayMin: 60, aliases: ['나리타공항', '나리타', 'narita', 'nrt', '成田空港'] },
   { name: '하네다 공항', coord: { lat: 35.5494, lng: 139.7798 }, area: '도쿄', regionId: 'tokyo', category: 'transport', stayMin: 60, aliases: ['하네다공항', '하네다', 'haneda', 'hnd', '羽田空港'] },

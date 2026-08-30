@@ -32,12 +32,8 @@ export function MapView({ day, legs, activeItemId, onSelect, height = 380 }: Pro
   const [ready, setReady] = useState(false);
   const scriptReady = useMapsReady();
 
-  // 이동 항목은 마커로 찍지 않는다 — 동선의 점은 장소만이어야 읽힌다
   const stops = useMemo(
-    () =>
-      day.items
-        .map((item, i) => ({ item, i }))
-        .filter((s) => !!s.item.place.coord && !s.item.transport),
+    () => day.items.map((item, i) => ({ item, i })).filter((s) => !!s.item.place.coord),
     [day],
   );
 
@@ -144,9 +140,7 @@ function resolveColor(cssVar: string): string {
  * ------------------------------------------------------------------ */
 
 function SchematicMap({ day, legs, activeItemId, onSelect, height }: Props & { height: number }) {
-  const stops = day.items
-    .map((item, i) => ({ item, i }))
-    .filter((s) => !!s.item.place.coord && !s.item.transport);
+  const stops = day.items.map((item, i) => ({ item, i })).filter((s) => !!s.item.place.coord);
 
   if (stops.length === 0) {
     return (

@@ -8,6 +8,7 @@ import { DEFAULT_RATE_TO_KRW } from '../lib/fares';
 import { regionById } from '../data/regions';
 import type { PoiEntry } from '../data/poi';
 import { optimizeDay } from '../lib/optimize';
+import type { TransportLeg } from '../types';
 import { isPublishable, knownReadOnly, markDirty, readEmbeddedState } from '../lib/share';
 import { markDirty as cloudMarkDirty } from '../lib/cloud';
 
@@ -64,6 +65,64 @@ function writeJSON(key: string, value: unknown) {
   }
 }
 
+/**
+ * 예전 형식 마이그레이션.
+ *
+ * 이동을 별도 항목으로 저장하던 때의 데이터를 두 장소 + 연결선 형태로 옮긴다.
+ * 저장된 게 없으면 아무 일도 하지 않는다.
+ */
+interface LegacyTransport {
+  mode: TransportLeg['mode'];
+  from?: { name: string };
+  to?: { name: string };
+  distanceM?: number;
+  manualDuration?: boolean;
+}
+
+function migrateTrips(trips: Trip[]): Trip[] {
+  let changed = false;
+
+  const migrated = trips.map((trip) => ({
+    ...trip,
+    days: trip.days.map((day) => {
+      if (!day.items.some((i) => (i as unknown as { transport?: unknown }).transport)) return day;
+      changed = true;
+
+      const items: Item[] = [];
+      for (const item of day.items) {
+        const legacy = (item as unknown as { transport?: LegacyTransport }).transport;
+        if (!legacy) {
+          items.push(item);
+          continue;
+        }
+        // 이동 항목은 도착지 장소로 바꾸고, 직전 항목에 연결선을 단다
+        const prev = items[items.length - 1];
+        const leg: TransportLeg = {
+          mode: legacy.mode,
+          durationMin: item.durationMin,
+          cost: item.cost,
+          distanceM: legacy.distanceM ?? 0,
+          manualDuration: legacy.manualDuration,
+        };
+        if (prev) items[items.length - 1] = { ...prev, transportToNext: leg };
+        items.push({
+          ...item,
+          title: legacy.to?.name ?? item.place.name,
+          category: 'transport',
+          durationMin: 0,
+          cost: 0,
+          startTime: addMinutes(item.startTime, item.durationMin),
+          transportToNext: undefined,
+          ...({ transport: undefined } as object),
+        });
+      }
+      return { ...day, items };
+    }),
+  }));
+
+  return changed ? migrated : trips;
+}
+
 function latestUpdate(trips: Trip[]): string {
   return trips.reduce((max, t) => (t.updatedAt > max ? t.updatedAt : max), '');
 }
@@ -80,7 +139,7 @@ function loadInitial(): State {
   // 내 로컬 일정을 읽지도, 쓰지도 않는다.
   if (linkedId) {
     const cached = readJSON<Trip[]>(SHARED_PREFIX + linkedId, []);
-    const trips = cached.length > 0 ? cached : [createSampleTrip()];
+    const trips = migrateTrips(cached.length > 0 ? cached : [createSampleTrip()]);
     return {
       trips,
       activeTripId: trips[0].id,
@@ -104,6 +163,7 @@ function loadInitial(): State {
     writeJSON(ACTIVE_KEY, trips[0].id);
   }
 
+  trips = migrateTrips(trips);
   const storedActive = readJSON<string>(ACTIVE_KEY, '');
   const activeTripId = trips.some((t) => t.id === storedActive) ? storedActive : trips[0].id;
   return {
@@ -187,8 +247,9 @@ function sortByTime(items: Item[]): Item[] {
 
 export const actions = {
   /** 공유 서버에서 받아온 일정으로 통째로 교체한다 (저장을 되돌려 걸지 않는다) */
-  applyRemoteTrips(trips: Trip[]) {
-    if (trips.length === 0) return;
+  applyRemoteTrips(input: Trip[]) {
+    if (input.length === 0) return;
+    const trips = migrateTrips(input);
     suppressSync += 1;
     try {
       set((prev) => ({
@@ -480,6 +541,82 @@ export const actions = {
     });
   },
 
+  /**
+   * 이동을 넣는다 — 출발·도착 장소를 동선에 세우고 그 사이를 이동으로 잇는다.
+   *
+   * 인천공항 → 간사이공항 비행기를 넣으면 두 공항이 1번·2번 방문지로 찍히고
+   * 그 사이에 비행기 표시가 들어간다. 이미 일정에 있는 장소는 새로 만들지 않는다.
+   */
+  addTransportLeg(
+    dayId: string,
+    input: {
+      from: PlaceRef;
+      to: PlaceRef;
+      leg: TransportLeg;
+      /** 출발 장소에서 출발하는 시각 */
+      departAt: string;
+      /** 출발·도착지에서 각각 머무는 시간 (공항 수속 등) */
+      fromStayMin?: number;
+      toStayMin?: number;
+    },
+  ) {
+    mapActiveTrip((trip) =>
+      mapDay(trip, dayId, (day) => {
+        const items = [...day.items];
+        const sameName = (a: PlaceRef, b: PlaceRef) => a.name === b.name;
+
+        const makeItem = (place: PlaceRef, startTime: string, stayMin: number): Item => ({
+          id: uid('item'),
+          title: place.name,
+          category: inferPlaceCategory(place.name),
+          place,
+          startTime,
+          durationMin: stayMin,
+          cost: 0,
+        });
+
+        // 출발지: 이미 있으면 쓰고, 없으면 만든다
+        let fromIndex = items.findIndex((i) => sameName(i.place, input.from));
+        if (fromIndex < 0) {
+          const item = makeItem(input.from, input.departAt, input.fromStayMin ?? 0);
+          // 시각 순서에 맞는 자리에 끼워 넣는다
+          fromIndex = items.findIndex((i) => toMinutes(i.startTime) > toMinutes(input.departAt));
+          if (fromIndex < 0) fromIndex = items.length;
+          items.splice(fromIndex, 0, item);
+        }
+
+        const fromItem = items[fromIndex];
+        const arrival = addMinutes(fromItem.startTime, fromItem.durationMin + input.leg.durationMin);
+
+        // 도착지: 출발지 바로 뒤에 온다
+        let toIndex = items.findIndex((i, idx) => idx !== fromIndex && sameName(i.place, input.to));
+        if (toIndex < 0) {
+          items.splice(fromIndex + 1, 0, makeItem(input.to, arrival, input.toStayMin ?? 0));
+        } else {
+          // 이미 있으면 출발지 바로 뒤로 옮기고 도착 시각을 맞춘다
+          const [moved] = items.splice(toIndex, 1);
+          const at = toIndex < fromIndex ? fromIndex : fromIndex + 1;
+          items.splice(at, 0, { ...moved, startTime: arrival });
+        }
+
+        const linkIndex = items.findIndex((i) => i.id === fromItem.id);
+        items[linkIndex] = { ...items[linkIndex], transportToNext: input.leg };
+
+        return { ...day, items };
+      }),
+    );
+  },
+
+  /** 직접 넣은 이동을 지운다. 장소는 그대로 두고 연결만 끊는다 */
+  removeTransportLeg(dayId: string, fromItemId: string) {
+    mapActiveTrip((trip) =>
+      mapDay(trip, dayId, (day) => ({
+        ...day,
+        items: day.items.map((i) => (i.id === fromItemId ? { ...i, transportToNext: undefined } : i)),
+      })),
+    );
+  },
+
   /** 동선 최적화 결과를 실제로 적용한다 (시각은 순서에 맞춰 다시 배분) */
   applyOptimizedOrder(dayId: string) {
     mapActiveTrip((trip) =>
@@ -592,6 +729,11 @@ export const actions = {
     return JSON.stringify({ trips: state.trips, settings: state.settings }, null, 2);
   },
 };
+
+/** 공항·역 같은 이름이면 '이동' 분류로 잡는다 */
+function inferPlaceCategory(name: string): Category {
+  return /공항|airport|역$|station|터미널|항\b|port/i.test(name) ? 'transport' : 'sight';
+}
 
 /**
  * 순서를 바꾼 뒤 시각 재배분:

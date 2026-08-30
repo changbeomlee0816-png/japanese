@@ -27,13 +27,24 @@ export interface PlaceRef {
   source?: 'google' | 'local' | 'manual';
 }
 
-export interface TransportInfo {
-  mode: 'flight' | 'train' | 'subway' | 'bus' | 'taxi' | 'walk' | 'ferry';
-  from: PlaceRef;
-  to: PlaceRef;
+export type TransportMode = 'flight' | 'train' | 'subway' | 'bus' | 'taxi' | 'walk' | 'ferry';
+
+/**
+ * 다음 장소로 가는 이동을 직접 지정한 것 (비행기·신칸센·페리 등).
+ *
+ * 이동은 별도 항목이 아니라 두 장소를 잇는 연결선이다.
+ * 그래야 "1번 인천공항 → ✈︎ → 2번 간사이공항"처럼 장소에만 번호가 매겨진다.
+ */
+export interface TransportLeg {
+  mode: TransportMode;
+  durationMin: number;
+  /** 1인 요금 */
+  cost: number;
   distanceM: number;
   /** 사용자가 소요시간을 직접 고쳤는지 */
   manualDuration?: boolean;
+  /** 편명·좌석 같은 메모 */
+  note?: string;
 }
 
 export interface Item {
@@ -52,11 +63,8 @@ export interface Item {
   modeToNext?: TravelMode;
   /** 시각을 고정한다 — 예약이 있거나 순서를 바꾸면 안 되는 일정. 동선 최적화가 건드리지 않는다 */
   pinned?: boolean;
-  /**
-   * 이 항목이 장소가 아니라 이동 구간일 때 채워진다.
-   * durationMin 은 소요시간, cost 는 1인 요금이 된다.
-   */
-  transport?: TransportInfo;
+  /** 다음 장소로 가는 이동을 직접 지정했을 때 */
+  transportToNext?: TransportLeg;
   /** 실시간 추적용 */
   actualStart?: string; // ISO
   actualEnd?: string;   // ISO
@@ -100,9 +108,13 @@ export interface Leg {
   fare: number;
   /** 대중교통 환승 안내 등 사람이 읽는 요약 */
   summary: string;
+  /** 화면에 쓸 이동수단 이름. 직접 지정한 이동은 '비행기'처럼 실제 수단을 보여준다 */
+  label?: string;
+  /** 요금을 추정하지 않은 구간(항공권 등) */
+  fareUnknown?: boolean;
   steps?: LegStep[];
-  /** google=Directions API 실측, estimate=거리 기반 추정 */
-  source: 'google' | 'estimate';
+  /** google=Directions API 실측, estimate=거리 기반 추정, manual=사용자가 직접 지정 */
+  source: 'google' | 'estimate' | 'manual';
   /** 경로 폴리라인 (encoded) */
   polyline?: string;
 }
