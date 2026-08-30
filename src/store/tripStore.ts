@@ -5,6 +5,8 @@ import { addDaysISO, addMinutes, todayISO, toMinutes } from '../lib/time';
 import { createSampleTrip } from '../lib/sample';
 import { defaultDuration, parsePlanText } from '../lib/parsePlan';
 import { DEFAULT_RATE_TO_KRW } from '../lib/fares';
+import { regionById } from '../data/regions';
+import type { PoiEntry } from '../data/poi';
 import { isPublishable, knownReadOnly, markDirty, readEmbeddedState } from '../lib/share';
 import { markDirty as cloudMarkDirty } from '../lib/cloud';
 
@@ -202,25 +204,102 @@ export const actions = {
     set((prev) => ({ ...prev, activeTripId: id }));
   },
 
-  createTrip(title: string, destination: string, currency: string, startDate: string, dayCount: number): string {
+  /** 지역을 고르면 통화·환율·지도 중심이 함께 정해진다 */
+  createTrip(input: {
+    title?: string;
+    regionId: string;
+    startDate: string;
+    dayCount: number;
+    travelers?: number;
+  }): string {
+    const region = regionById(input.regionId);
+    const currency = region?.currency ?? 'JPY';
     const id = uid('trip');
-    const days: Day[] = Array.from({ length: Math.max(1, dayCount) }, (_, i) => ({
+    const days: Day[] = Array.from({ length: Math.max(1, input.dayCount) }, (_, i) => ({
       id: uid('day'),
-      date: addDaysISO(startDate, i),
+      date: addDaysISO(input.startDate, i),
       items: [],
     }));
     const trip: Trip = {
       id,
-      title: title || '새 여행',
-      destination,
+      title: input.title?.trim() || `${region?.name ?? '새'} 여행`,
+      destination: region?.name ?? '',
+      regionId: input.regionId,
       currency,
       rateToKRW: DEFAULT_RATE_TO_KRW[currency.toUpperCase()] ?? 1,
-      travelers: 1,
+      travelers: input.travelers ?? 2,
       days,
+      saved: [],
       updatedAt: new Date().toISOString(),
     };
     set((prev) => ({ ...prev, trips: [trip, ...prev.trips], activeTripId: id }));
     return id;
+  },
+
+  /* ---------------- 가고 싶은 곳 ---------------- */
+
+  /** 둘러보기에서 담기 — 날짜는 나중에 정한다 */
+  saveSpot(poi: PoiEntry) {
+    mapActiveTrip((trip) => {
+      const saved = trip.saved ?? [];
+      if (saved.some((i) => i.title === poi.name)) return trip;
+      const item: Item = {
+        id: uid('item'),
+        title: poi.name,
+        category: poi.category ?? 'sight',
+        place: { name: poi.name, address: poi.area, coord: poi.coord, source: 'local' },
+        startTime: '',
+        durationMin: poi.stayMin ?? defaultDuration(poi.category ?? 'sight'),
+        cost: 0,
+      };
+      return { ...trip, saved: [...saved, item] };
+    });
+  },
+
+  removeSaved(itemId: string) {
+    mapActiveTrip((trip) => ({ ...trip, saved: (trip.saved ?? []).filter((i) => i.id !== itemId) }));
+  },
+
+  /** 보관함의 장소를 특정 날짜 끝에 배치한다 */
+  placeSaved(itemId: string, dayId: string) {
+    mapActiveTrip((trip) => {
+      const item = (trip.saved ?? []).find((i) => i.id === itemId);
+      if (!item) return trip;
+      return {
+        ...trip,
+        saved: (trip.saved ?? []).filter((i) => i.id !== itemId),
+        days: trip.days.map((d) => {
+          if (d.id !== dayId) return d;
+          const last = d.items[d.items.length - 1];
+          const startTime = last ? addMinutes(last.startTime, last.durationMin + 30) : '10:00';
+          return { ...d, items: [...d.items, { ...item, startTime }] };
+        }),
+      };
+    });
+  },
+
+  /** 둘러보기에서 곧바로 날짜에 넣기 */
+  addSpotToDay(dayId: string, poi: PoiEntry) {
+    actions.addItem(dayId, {
+      title: poi.name,
+      category: poi.category ?? 'sight',
+      place: { name: poi.name, address: poi.area, coord: poi.coord, source: 'local' },
+      durationMin: poi.stayMin ?? defaultDuration(poi.category ?? 'sight'),
+    });
+  },
+
+  /** 일정에 있는 항목을 보관함으로 되돌린다 */
+  unschedule(dayId: string, itemId: string) {
+    mapActiveTrip((trip) => {
+      const day = trip.days.find((d) => d.id === dayId);
+      const item = day?.items.find((i) => i.id === itemId);
+      if (!item) return trip;
+      return {
+        ...trip,
+        saved: [...(trip.saved ?? []), { ...item, startTime: '', done: false, actualStart: undefined, actualEnd: undefined }],
+        days: trip.days.map((d) => (d.id === dayId ? { ...d, items: d.items.filter((i) => i.id !== itemId) } : d)),
+      };
+    });
   },
 
   duplicateTrip(id: string) {

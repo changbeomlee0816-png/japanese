@@ -36,10 +36,12 @@ export function createSampleTrip(): Trip {
     id: uid('trip'),
     title: '도쿄 3일',
     destination: '도쿄',
+    regionId: 'tokyo',
     currency: 'JPY',
     rateToKRW: 9.4,
     travelers: 2,
     updatedAt: new Date().toISOString(),
+    saved: [],
     days: [
       {
         id: uid('day'),

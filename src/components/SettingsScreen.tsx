@@ -3,11 +3,13 @@ import type { Settings, Trip } from '../types';
 import { actions, useStore } from '../store/tripStore';
 import { clearLegCache } from '../store/useLegs';
 import { mapsLoaded } from '../lib/maps';
-import { DEFAULT_RATE_TO_KRW } from '../lib/fares';
 import { todayISO } from '../lib/time';
 import { saveFile } from '../lib/share';
 import { Row, Sheet, Switch, Segmented } from './ui';
 import { ShareLinkSection } from './ShareLinkSection';
+import { NewTripSheet, RegionGrid } from './NewTripSheet';
+import { findRegion } from '../data/regions';
+import { DEFAULT_RATE_TO_KRW } from '../lib/fares';
 import { useCloud } from '../lib/cloud';
 import { Icon } from './Icon';
 
@@ -22,6 +24,8 @@ export function SettingsScreen({ trip, settings, readOnly = false }: Props) {
   const cloud = useCloud();
   const [keyDraft, setKeyDraft] = useState(settings.googleMapsApiKey);
   const [tripSheet, setTripSheet] = useState(false);
+  const [regionSheet, setRegionSheet] = useState(false);
+  const [regionQuery, setRegionQuery] = useState('');
   const [newTrip, setNewTrip] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
 
@@ -183,8 +187,16 @@ export function SettingsScreen({ trip, settings, readOnly = false }: Props) {
           </div>
           <div className="list">
             <Row label="현재 여행" value={trip.title} onClick={() => setTripSheet(true)} />
+            <Row
+              label="여행지"
+              value={trip.destination || '정하지 않음'}
+              onClick={() => setRegionSheet(true)}
+            />
             <Row label="저장된 여행" value={`${trips.length}개`} onClick={() => setTripSheet(true)} />
           </div>
+          <p className="muted tiny" style={{ padding: '10px 4px 0' }}>
+            여행지를 정하면 둘러보기 목록과 지도 중심, 통화가 함께 맞춰집니다.
+          </p>
         </div>
       )}
 
@@ -213,6 +225,49 @@ export function SettingsScreen({ trip, settings, readOnly = false }: Props) {
             : '이 일정은 공유 서버에 저장되어 링크로 열립니다. 설정과 구글맵 키는 이 브라우저에만 남습니다.'}
         </p>
       </div>
+
+      <Sheet
+        open={regionSheet}
+        title="여행지 바꾸기"
+        onClose={() => {
+          setRegionQuery('');
+          setRegionSheet(false);
+        }}
+      >
+        <div className="section">
+          <div className="search-bar">
+            <Icon name="search" size={17} strokeWidth={2.2} color="var(--label-2)" />
+            <input
+              className="input"
+              value={regionQuery}
+              onChange={(e) => setRegionQuery(e.target.value)}
+              placeholder="도시 이름으로 찾기"
+            />
+          </div>
+        </div>
+        <div className="section">
+          <RegionGrid
+            query={regionQuery}
+            onPick={(r) => {
+              actions.updateTrip({
+                regionId: r.id,
+                destination: r.name,
+                currency: r.currency,
+                rateToKRW: DEFAULT_RATE_TO_KRW[r.currency] ?? trip.rateToKRW,
+              });
+              setRegionQuery('');
+              setRegionSheet(false);
+            }}
+          />
+        </div>
+        <div className="section">
+          <p className="muted tiny" style={{ padding: '0 4px' }}>
+            지금 여행지는 <strong>{trip.destination || '미정'}</strong>
+            {findRegion(trip.destination) ? '' : ' — 목록에 없는 곳이라 둘러보기가 비어 있을 수 있습니다'}.
+            이미 넣은 일정은 그대로 남습니다.
+          </p>
+        </div>
+      </Sheet>
 
       <TripListSheet open={tripSheet} onClose={() => setTripSheet(false)} activeId={trip.id} trips={trips} />
       <NewTripSheet open={newTrip} onClose={() => setNewTrip(false)} />
@@ -255,68 +310,6 @@ function TripListSheet({ open, onClose, trips, activeId }: { open: boolean; onCl
               </button>
             </div>
           ))}
-        </div>
-      </div>
-    </Sheet>
-  );
-}
-
-function NewTripSheet({ open, onClose }: { open: boolean; onClose: () => void }) {
-  const [title, setTitle] = useState('');
-  const [destination, setDestination] = useState('');
-  const [currency, setCurrency] = useState('JPY');
-  const [startDate, setStartDate] = useState(todayISO());
-  const [dayCount, setDayCount] = useState(3);
-
-  return (
-    <Sheet
-      open={open}
-      title="새 여행"
-      onClose={onClose}
-      confirmLabel="만들기"
-      confirmDisabled={!title.trim()}
-      onConfirm={() => {
-        actions.createTrip(title.trim(), destination.trim() || title.trim(), currency, startDate, dayCount);
-        setTitle('');
-        setDestination('');
-        onClose();
-      }}
-    >
-      <div className="section">
-        <div className="list">
-          <div className="field">
-            <span className="field__label">이름</span>
-            <input className="input" value={title} onChange={(e) => setTitle(e.target.value)} placeholder="예: 오사카 4박 5일" autoFocus />
-          </div>
-          <div className="field">
-            <span className="field__label">도시</span>
-            <input className="input" value={destination} onChange={(e) => setDestination(e.target.value)} placeholder="예: 오사카" />
-          </div>
-          <div className="field">
-            <span className="field__label">통화</span>
-            <select className="select" value={currency} onChange={(e) => setCurrency(e.target.value)}>
-              {Object.keys(DEFAULT_RATE_TO_KRW).map((c) => (
-                <option key={c} value={c}>{c}</option>
-              ))}
-            </select>
-          </div>
-          <div className="field">
-            <span className="field__label">시작일</span>
-            <input className="input" type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} style={{ textAlign: 'right' }} />
-          </div>
-          <div className="field">
-            <span className="field__label">며칠</span>
-            <input
-              className="input"
-              type="number"
-              min={1}
-              max={60}
-              value={dayCount}
-              onChange={(e) => setDayCount(Math.max(1, Math.min(60, Number(e.target.value) || 1)))}
-              style={{ textAlign: 'right' }}
-            />
-            <span className="muted">일</span>
-          </div>
         </div>
       </div>
     </Sheet>

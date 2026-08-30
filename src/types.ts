@@ -60,12 +60,16 @@ export interface Trip {
   title: string;
   /** 도시/지역 이름 — 맛집 추천과 요금 모델의 기준 */
   destination: string;
+  /** regions.ts 의 Region.id — 둘러보기와 지도 중심의 기준 */
+  regionId?: string;
   /** 통화 코드 (JPY, KRW, USD, EUR ...) */
   currency: string;
   /** 현지 통화 1단위 = ? KRW */
   rateToKRW: number;
   travelers: number;
   days: Day[];
+  /** 가고 싶은 곳 — 날짜를 아직 안 정한 후보들 */
+  saved?: Item[];
   updatedAt: string;
 }
 
