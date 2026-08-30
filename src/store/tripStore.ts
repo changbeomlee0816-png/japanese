@@ -388,6 +388,8 @@ export const actions = {
         const startTime =
           partial.startTime ?? (last ? addMinutes(last.startTime, last.durationMin + 30) : '09:00');
         const item: Item = {
+          // 넘어온 값을 먼저 펼쳐 transport·pinned 같은 필드가 유실되지 않게 한다
+          ...partial,
           id: uid('item'),
           title: partial.title,
           category,
@@ -395,8 +397,6 @@ export const actions = {
           startTime,
           durationMin: partial.durationMin ?? defaultDuration(category),
           cost: partial.cost ?? 0,
-          notes: partial.notes,
-          modeToNext: partial.modeToNext,
         };
         return { ...day, items: sortByTime([...day.items, item]) };
       }),

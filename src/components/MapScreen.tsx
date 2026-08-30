@@ -99,6 +99,16 @@ export function MapScreen({ trip, settings, dayIndex, onDayChange, onShowFood }:
           {day.items.map((item, i) => {
             const leg = legs[i];
             if (!item.place.coord) return null;
+            if (item.transport) {
+              return (
+                <div key={item.id} className="row route-leg">
+                  <span className="route-leg__line" />
+                  <span className="row__label muted small">
+                    {item.title} · {formatDuration(item.durationMin)}
+                  </span>
+                </div>
+              );
+            }
             const meta = CATEGORY[item.category];
             return (
               <div key={item.id}>

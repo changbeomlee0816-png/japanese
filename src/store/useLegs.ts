@@ -41,6 +41,11 @@ export function useLegs(day: Day | undefined, currency: string, enabled: boolean
     for (let i = 0; i < day.items.length - 1; i += 1) {
       const a = day.items[i];
       const b = day.items[i + 1];
+      // 이동 항목이 곧 그 구간의 이동이다. 앞뒤로 추정 구간을 또 만들면 중복된다
+      if (a.transport || b.transport) {
+        out.push(null);
+        continue;
+      }
       if (!a.place.coord || !b.place.coord) {
         out.push(null);
         continue;

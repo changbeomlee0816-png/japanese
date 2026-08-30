@@ -17,6 +17,7 @@ import { ExploreSheet } from './ExploreSheet';
 import { TripOverview } from './TripOverview';
 import { SavedShelf } from './SavedShelf';
 import { DayInsights } from './DayInsights';
+import { TransportSheet } from './TransportSheet';
 import { useWeather } from '../lib/weather';
 import { Icon } from './Icon';
 
@@ -42,6 +43,7 @@ export function PlanScreen({ trip, settings, dayIndex, onDayChange, bias, onShow
   const [editing, setEditing] = useState<{ item: Item | null; focusPlace?: boolean } | null>(null);
   const [quickAdd, setQuickAdd] = useState(false);
   const [explore, setExplore] = useState(false);
+  const [transport, setTransport] = useState(false);
   /** 전체 윤곽을 먼저 보고 하루를 파고드는 흐름 */
   const [view, setView] = useState<'overview' | 'day'>('overview');
   const [dayMenu, setDayMenu] = useState(false);
@@ -245,6 +247,9 @@ export function PlanScreen({ trip, settings, dayIndex, onDayChange, bias, onShow
                   <button className="btn btn--tinted" type="button" onClick={() => setEditing({ item: null })}>
                     직접 추가
                   </button>
+                  <button className="btn btn--gray" type="button" onClick={() => setTransport(true)}>
+                    이동 추가
+                  </button>
                   <button className="btn btn--gray" type="button" onClick={() => setQuickAdd(true)}>
                     붙여넣기
                   </button>
@@ -272,6 +277,7 @@ export function PlanScreen({ trip, settings, dayIndex, onDayChange, bias, onShow
       {day.items.length > 0 && (
         <div className="section">
           <div className="list">
+            {!readOnly && <Row label="이동 추가 (비행기 · 신칸센 등)" icon="plane" accent onClick={() => setTransport(true)} />}
             {!readOnly && <Row label="이 지역 둘러보기" icon="sparkles" accent onClick={() => setExplore(true)} />}
             {!readOnly && <Row label="메모한 일정 붙여넣기" icon="plan" accent onClick={() => setQuickAdd(true)} />}
             <Row label="PDF로 내보내기" icon="printer" accent onClick={onPrint} />
@@ -298,6 +304,8 @@ export function PlanScreen({ trip, settings, dayIndex, onDayChange, bias, onShow
           onClose={() => setEditing(null)}
         />
       )}
+
+      <TransportSheet open={transport} trip={trip} day={day} onClose={() => setTransport(false)} />
 
       <ExploreSheet open={explore} trip={trip} dayIndex={dayIndex} onClose={() => setExplore(false)} />
 

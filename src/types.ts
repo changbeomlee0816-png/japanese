@@ -27,6 +27,15 @@ export interface PlaceRef {
   source?: 'google' | 'local' | 'manual';
 }
 
+export interface TransportInfo {
+  mode: 'flight' | 'train' | 'subway' | 'bus' | 'taxi' | 'walk' | 'ferry';
+  from: PlaceRef;
+  to: PlaceRef;
+  distanceM: number;
+  /** 사용자가 소요시간을 직접 고쳤는지 */
+  manualDuration?: boolean;
+}
+
 export interface Item {
   id: string;
   title: string;
@@ -43,6 +52,11 @@ export interface Item {
   modeToNext?: TravelMode;
   /** 시각을 고정한다 — 예약이 있거나 순서를 바꾸면 안 되는 일정. 동선 최적화가 건드리지 않는다 */
   pinned?: boolean;
+  /**
+   * 이 항목이 장소가 아니라 이동 구간일 때 채워진다.
+   * durationMin 은 소요시간, cost 는 1인 요금이 된다.
+   */
+  transport?: TransportInfo;
   /** 실시간 추적용 */
   actualStart?: string; // ISO
   actualEnd?: string;   // ISO
