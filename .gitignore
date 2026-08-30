@@ -6,3 +6,4 @@ dist
 .vite
 tsconfig.tsbuildinfo
 dist-artifact
+dist-single

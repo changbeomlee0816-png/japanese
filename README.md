@@ -7,6 +7,7 @@
 npm install
 npm run dev             # http://localhost:5173
 npm run build           # dist/ — GitHub Pages 등 정적 호스팅용
+npm run build:single    # dist-single/index.html — 단일 파일 (Supabase 배포용)
 npm run build:artifact  # dist-artifact/tabi.html — Claude Artifact용 단일 파일
 ```
 
@@ -63,11 +64,27 @@ Supabase 보안 린터가 `rls_enabled_no_policy`와 `anon_security_definer_func
 - 남의 링크를 열어도 **내 로컬 일정은 그대로 남습니다.** 공유 링크의 일정은 별도 캐시
   (`tabi.shared.<id>`)에 저장되고, `이 링크에서 나가기`를 누르면 원래 내 일정으로 돌아옵니다.
 
-### 배포
+### 배포 — 현재는 Supabase가 앱까지 서빙합니다
 
-`.github/workflows/deploy.yml`이 `main` 또는 개발 브랜치에 푸시될 때 타입 검사 → 빌드 →
-GitHub Pages 배포를 실행합니다. 저장소 **Settings → Pages → Source**를 `GitHub Actions`로
-한 번만 바꿔주면 됩니다.
+```
+https://fgravvpnzvjfwgeqolhl.supabase.co/functions/v1/app
+```
+
+앱 전체를 단일 HTML로 묶어(`npm run build:single`) Storage 공개 버킷에 올리고,
+엣지 함수 `app`이 그 파일을 `text/html`로 내보냅니다.
+(Storage 공개 버킷은 HTML을 `text/plain`으로 강제하기 때문에 함수를 한 겹 둡니다.)
+
+```bash
+SUPABASE_SERVICE_KEY=... ./scripts/deploy-supabase.sh
+```
+
+Storage 버킷은 읽기만 열려 있습니다. 배포에 쓰는 서비스 키는 저장소에 넣지 않습니다.
+
+**GitHub Pages를 쓰려면 저장소가 공개여야 합니다.** 무료 플랜에서는 비공개 저장소에
+Pages를 쓸 수 없어(`Create Pages site failed: Resource not accessible by integration`)
+현재 워크플로는 실패합니다. 저장소를 공개로 바꾸거나 GitHub Pro로 올리면
+`.github/workflows/deploy.yml`이 그대로 동작하고, 주소는
+`https://changbeomlee0816-png.github.io/japanese/` 가 됩니다.
 
 Supabase 프로젝트는 무료 티어라 약 1주일간 접속이 없으면 자동으로 일시정지됩니다.
 그때는 Supabase 대시보드에서 재개해야 링크가 다시 열립니다.
@@ -233,5 +250,11 @@ src/
 └── styles/               디자인 토큰 · 화면 스타일 · 인쇄 스타일
 
 scripts/
-└── build-artifact.mjs    빌드 결과를 공유 링크용 단일 HTML로 묶는다
+├── build-single.mjs      빌드 결과를 순수 단일 HTML로 묶는다 (Supabase 배포용)
+├── build-artifact.mjs    Claude Artifact용 — 자기 소스를 품은 단일 HTML
+└── deploy-supabase.sh    빌드 후 Storage에 업로드
+
+supabase/
+├── functions/app/        앱 HTML을 text/html로 서빙하는 엣지 함수
+└── migrations/           trips 테이블과 trip_* 함수
 ```
