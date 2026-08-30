@@ -7,7 +7,6 @@ import {
   suitsDistance,
   transportDistance,
   transportLabel,
-  transportTitle,
   type TransportMode,
 } from '../lib/transport';
 import { actions } from '../store/tripStore';
@@ -42,10 +41,7 @@ interface Props {
  * 이동수단을 고르면 소요시간·거리·요금을 계산해서 채워 준다.
  */
 export function TransportSheet({ open, trip, day, onClose }: Props) {
-  const places = useMemo(
-    () => day.items.filter((i) => !i.transport && i.place.coord),
-    [day.items],
-  );
+  const places = useMemo(() => day.items.filter((i) => i.place.coord), [day.items]);
 
   const [from, setFrom] = useState<PlaceRef | null>(null);
   const [to, setTo] = useState<PlaceRef | null>(null);
@@ -54,6 +50,7 @@ export function TransportSheet({ open, trip, day, onClose }: Props) {
   const [durationMin, setDurationMin] = useState(30);
   const [cost, setCost] = useState(0);
   const [touchedDuration, setTouchedDuration] = useState(false);
+  const [note, setNote] = useState('');
   const [searching, setSearching] = useState<'from' | 'to' | null>(null);
 
   /* 열릴 때 기본값 — 마지막 두 장소를 잇는 게 가장 흔한 경우다 */
@@ -64,6 +61,7 @@ export function TransportSheet({ open, trip, day, onClose }: Props) {
     setFrom(places.length >= 2 ? a : null);
     setTo(places.length >= 2 ? b : null);
     setTouchedDuration(false);
+    setNote('');
     setSearching(places.length >= 2 ? null : 'from');
 
     const last = day.items[day.items.length - 1];
@@ -93,23 +91,21 @@ export function TransportSheet({ open, trip, day, onClose }: Props) {
 
   const add = () => {
     if (!from?.coord || !to?.coord || !estimate) return;
-    const info = {
-      mode,
+    actions.addTransportLeg(day.id, {
       from,
       to,
-      distanceM: estimate.distanceM,
-      manualDuration: touchedDuration,
-    };
-    const item: Partial<Item> & { title: string } = {
-      title: transportTitle(info),
-      category: 'transport',
-      place: to,
-      startTime,
-      durationMin,
-      cost,
-      transport: info,
-    };
-    actions.addItem(day.id, item);
+      departAt: startTime,
+      // 공항은 수속 시간이 필요하니 출발지에 머무는 시간을 잡아 둔다
+      fromStayMin: mode === 'flight' ? 0 : 0,
+      leg: {
+        mode,
+        durationMin,
+        cost,
+        distanceM: estimate.distanceM,
+        manualDuration: touchedDuration,
+        note: note.trim() || undefined,
+      },
+    });
     onClose();
   };
 
@@ -252,6 +248,15 @@ export function TransportSheet({ open, trip, day, onClose }: Props) {
                     style={{ textAlign: 'right' }}
                   />
                   <span className="muted">분</span>
+                </div>
+                <div className="field">
+                  <span className="field__label">메모</span>
+                  <input
+                    className="input"
+                    value={note}
+                    onChange={(e) => setNote(e.target.value)}
+                    placeholder="편명, 좌석, 예약번호"
+                  />
                 </div>
                 <div className="field">
                   <span className="field__label">요금 / 1인</span>

@@ -4,7 +4,7 @@ import type { LiveItemState } from '../store/useLive';
 import { CATEGORY } from '../lib/category';
 import { formatDuration, addMinutes } from '../lib/time';
 import { transportLabel } from '../lib/transport';
-import type { TransportInfo } from '../types';
+import type { TransportMode } from '../types';
 import { formatMoney, MODE_LABEL } from '../lib/fares';
 import { Icon, type IconName } from './Icon';
 import { actions } from '../store/tripStore';
@@ -16,7 +16,10 @@ const MODE_ICON: Record<TravelMode, IconName> = {
   BICYCLING: 'bike',
 };
 
-const TRANSPORT_ICON: Record<TransportInfo['mode'], IconName> = {
+const MODES: TravelMode[] = ['WALKING', 'TRANSIT', 'DRIVING'];
+
+/** 직접 지정한 이동수단의 아이콘 */
+const TRANSPORT_ICON: Record<TransportMode, IconName> = {
   flight: 'plane',
   train: 'train',
   subway: 'train',
@@ -25,70 +28,6 @@ const TRANSPORT_ICON: Record<TransportInfo['mode'], IconName> = {
   walk: 'walk',
   ferry: 'ferry',
 };
-
-/* ------------------------------------------------------------------ *
- * 이동 항목 (비행기·신칸센 등 일정에 명시한 이동)
- * ------------------------------------------------------------------ */
-
-function TransportStop({
-  item,
-  dayId,
-  currency,
-  onEdit,
-  readOnly,
-  dragProps,
-}: {
-  item: Item;
-  dayId: string;
-  currency: string;
-  onEdit: () => void;
-  readOnly: boolean;
-  dragProps: React.HTMLAttributes<HTMLElement>;
-}) {
-  const info = item.transport!;
-  const arrival = addMinutes(item.startTime, item.durationMin);
-
-  return (
-    <article className={`stop stop--transport${item.done ? ' stop--done' : ''}`} {...dragProps}>
-      <div className="stop__rail">
-        <div className="stop__time mono">{item.startTime}</div>
-        <button
-          type="button"
-          className="stop__dot stop__dot--transport"
-          onClick={() => !readOnly && actions.setDone(dayId, item.id, !item.done)}
-          aria-label={item.done ? '완료 취소' : '완료 표시'}
-        >
-          <Icon name={TRANSPORT_ICON[info.mode]} size={12} strokeWidth={2.2} />
-        </button>
-        <div className="stop__stem" />
-      </div>
-
-      <div className="stop__card">
-        <button type="button" className="stop__main" onClick={readOnly ? () => {} : onEdit}>
-          <div className="stop__head">
-            <span className="tstop__badge">{transportLabel(info.mode)}</span>
-            <h3 className="stop__title">
-              {info.from.name} → {info.to.name}
-            </h3>
-            {!readOnly && <Icon name="chevronRight" size={15} className="chevron" strokeWidth={2.2} />}
-          </div>
-
-          <div className="stop__meta">
-            <span className="badge badge--blue">{formatDuration(item.durationMin)}</span>
-            <span className="badge">{(info.distanceM / 1000).toFixed(info.distanceM < 10000 ? 1 : 0)}km</span>
-            <span className="badge">{item.cost > 0 ? formatMoney(item.cost, currency) : '요금 미입력'}</span>
-            {info.manualDuration && <span className="badge">직접 입력</span>}
-          </div>
-
-          <p className="stop__addr">{item.startTime} 출발 · {arrival} 도착 예정</p>
-          {item.notes && <p className="stop__notes">{item.notes}</p>}
-        </button>
-      </div>
-    </article>
-  );
-}
-
-const MODES: TravelMode[] = ['WALKING', 'TRANSIT', 'DRIVING'];
 
 /* ------------------------------------------------------------------ *
  * 하나의 방문지
@@ -150,7 +89,9 @@ function Stop({ item, index, dayId, currency, live, isLiveDay, onEdit, onFindPla
               <Icon name={meta.icon} size={12} strokeWidth={2} />
               {meta.label}
             </span>
-            <span className="badge">{formatDuration(item.durationMin)}</span>
+            <span className="badge">
+              {item.durationMin > 0 ? formatDuration(item.durationMin) : '바로 이동'}
+            </span>
             {item.cost > 0 && <span className="badge">{formatMoney(item.cost, currency)}</span>}
             {showLive && status === 'current' && <span className="badge badge--green">진행 중</span>}
             {showLive && status === 'overdue' && <span className="badge badge--orange">시간 지남</span>}
@@ -227,6 +168,45 @@ function LegBlock({
   readOnly: boolean;
 }) {
   const [open, setOpen] = useState(false);
+  const manual = fromItem.transportToNext;
+
+  // 직접 넣은 이동(비행기·신칸센 등)은 추정 구간 대신 이걸 보여준다
+  if (manual) {
+    const arrival = addMinutes(fromItem.startTime, fromItem.durationMin + manual.durationMin);
+    return (
+      <div className="leg leg--manual">
+        <div className="leg__rail"><span className="leg__line leg__line--manual" /></div>
+        <div className="leg__content">
+          <div className="leg__body leg__body--manual">
+            <span className="leg__icon leg__icon--manual">
+              <Icon name={TRANSPORT_ICON[manual.mode]} size={18} strokeWidth={1.9} />
+            </span>
+            <span className="leg__text">
+              <strong>
+                {transportLabel(manual.mode)} {formatDuration(manual.durationMin)}
+              </strong>
+              <span className="muted small">
+                {(manual.distanceM / 1000).toFixed(manual.distanceM < 10000 ? 1 : 0)}km ·{' '}
+                {manual.cost > 0 ? formatMoney(manual.cost, currency) : '요금 미입력'} · {arrival} 도착
+                {manual.note ? ` · ${manual.note}` : ''}
+              </span>
+            </span>
+            {!readOnly && (
+              <button
+                type="button"
+                className="leg__remove"
+                onClick={() => actions.removeTransportLeg(dayId, fromItem.id)}
+                aria-label="이동 지우기"
+                title="직접 넣은 이동 지우기"
+              >
+                <Icon name="close" size={15} strokeWidth={2.4} />
+              </button>
+            )}
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   if (!leg) {
     return (
@@ -337,44 +317,15 @@ export function Timeline({ day, legs, currency, liveStates, isLiveDay, onEditIte
     <div className="timeline">
       {day.items.map((item, i) => {
         const next = day.items[i + 1];
-        // 번호는 장소에만 매긴다 — 이동 항목이 순번을 잡아먹으면 헷갈린다
-        const placeIndex = day.items.slice(0, i).filter((x) => !x.transport).length;
         const gapMin = next
           ? toMin(next.startTime) - (toMin(item.startTime) + item.durationMin)
           : 0;
 
         return (
           <div key={item.id} className={overIndex === i && dragIndex !== null && dragIndex !== i ? 'drop-target' : undefined}>
-            {item.transport ? (
-              <TransportStop
-                item={item}
-                dayId={day.id}
-                currency={currency}
-                readOnly={readOnly}
-                onEdit={() => onEditItem(item)}
-                dragProps={{
-                  draggable: !readOnly,
-                  onDragStart: () => setDragIndex(i),
-                  onDragEnd: () => {
-                    setDragIndex(null);
-                    setOverIndex(null);
-                  },
-                  onDragOver: (e) => {
-                    e.preventDefault();
-                    setOverIndex(i);
-                  },
-                  onDrop: (e) => {
-                    e.preventDefault();
-                    if (dragIndex !== null && dragIndex !== i) actions.reorderItem(day.id, dragIndex, i);
-                    setDragIndex(null);
-                    setOverIndex(null);
-                  },
-                }}
-              />
-            ) : (
             <Stop
               item={item}
-              index={placeIndex}
+              index={i}
               dayId={day.id}
               currency={currency}
               live={liveStates[i]}
@@ -402,8 +353,7 @@ export function Timeline({ day, legs, currency, liveStates, isLiveDay, onEditIte
                 },
               }}
             />
-            )}
-            {next && !item.transport && !next.transport && (
+            {next && (
               <LegBlock
                 leg={legs[i] ?? null}
                 currency={currency}

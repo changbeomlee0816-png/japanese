@@ -208,18 +208,13 @@ function DayCostRow({
     const byCategory: Partial<Record<Category, number>> = {};
     let spend = 0;
     let minutes = 0;
-    let explicitTransit = 0;
     for (const item of day.items) {
       minutes += item.durationMin;
-      if (item.transport) {
-        // 비행기·신칸센처럼 직접 넣은 이동은 교통비로 센다
-        explicitTransit += item.cost;
-        continue;
-      }
       spend += item.cost;
       byCategory[item.category] = (byCategory[item.category] ?? 0) + item.cost;
     }
-    const transit = legs.reduce((n, l) => n + (l?.fare ?? 0), 0) + explicitTransit;
+    // 직접 넣은 이동도 Leg 로 흘러오므로 교통비에 함께 잡힌다
+    const transit = legs.reduce((n, l) => n + (l?.fare ?? 0), 0);
     minutes += legs.reduce((n, l) => n + (l?.durationMin ?? 0), 0);
     return { transit, spend, minutes, byCategory };
   }, [day, legs]);

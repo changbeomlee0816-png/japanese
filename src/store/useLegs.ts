@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { Day, Leg, TravelMode } from '../types';
 import { estimateLeg, fetchDirections, mapsLoaded } from '../lib/maps';
+import { toTravelMode, transportLabel } from '../lib/transport';
 import { routeDistance, suggestMode } from '../lib/geo';
 import { dateTimeOf } from '../lib/time';
 
@@ -41,8 +42,8 @@ export function useLegs(day: Day | undefined, currency: string, enabled: boolean
     for (let i = 0; i < day.items.length - 1; i += 1) {
       const a = day.items[i];
       const b = day.items[i + 1];
-      // 이동 항목이 곧 그 구간의 이동이다. 앞뒤로 추정 구간을 또 만들면 중복된다
-      if (a.transport || b.transport) {
+      // 직접 넣은 이동이 있으면 그것이 이 구간의 이동이다 — 추정하지 않는다
+      if (a.transportToNext) {
         out.push(null);
         continue;
       }
@@ -101,10 +102,26 @@ export function useLegs(day: Day | undefined, currency: string, enabled: boolean
   const legs = useMemo(() => {
     if (!day) return [];
     return plan.map((p, i) => {
+      const a = day.items[i];
+      const manual = a?.transportToNext;
+      if (manual) {
+        // 사용자가 직접 넣은 이동. 다른 화면들이 Leg 하나만 보면 되도록 같은 모양으로 돌려준다
+        return {
+          fromItemId: a.id,
+          toItemId: day.items[i + 1].id,
+          mode: toTravelMode(manual.mode),
+          distanceM: manual.distanceM,
+          durationMin: manual.durationMin,
+          fare: manual.cost,
+          summary: manual.note ?? '',
+          label: transportLabel(manual.mode),
+          fareUnknown: manual.cost === 0,
+          source: 'manual' as const,
+        };
+      }
       if (!p) return null;
       const cached = cache.get(p.key);
       if (cached) return cached;
-      const a = day.items[i];
       const b = day.items[i + 1];
       return estimateLeg(a.place.coord!, b.place.coord!, p.mode, a.id, b.id, currency);
     });

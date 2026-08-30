@@ -99,16 +99,6 @@ export function MapScreen({ trip, settings, dayIndex, onDayChange, onShowFood }:
           {day.items.map((item, i) => {
             const leg = legs[i];
             if (!item.place.coord) return null;
-            if (item.transport) {
-              return (
-                <div key={item.id} className="row route-leg">
-                  <span className="route-leg__line" />
-                  <span className="row__label muted small">
-                    {item.title} · {formatDuration(item.durationMin)}
-                  </span>
-                </div>
-              );
-            }
             const meta = CATEGORY[item.category];
             return (
               <div key={item.id}>
@@ -143,8 +133,13 @@ export function MapScreen({ trip, settings, dayIndex, onDayChange, onShowFood }:
                   <div className="row route-leg">
                     <span className="route-leg__line" />
                     <span className="row__label muted small">
-                      {MODE_LABEL[leg.mode]} {formatDuration(leg.durationMin)} · {(leg.distanceM / 1000).toFixed(1)}km ·{' '}
-                      {leg.fare > 0 ? formatMoney(leg.fare, trip.currency) : '무료'}
+                      {leg.label ?? MODE_LABEL[leg.mode]} {formatDuration(leg.durationMin)} ·{' '}
+                      {(leg.distanceM / 1000).toFixed(1)}km ·{' '}
+                      {leg.fare > 0
+                        ? formatMoney(leg.fare, trip.currency)
+                        : leg.fareUnknown
+                          ? '요금 미입력'
+                          : '무료'}
                       {leg.summary ? ` · ${leg.summary}` : ''}
                     </span>
                   </div>

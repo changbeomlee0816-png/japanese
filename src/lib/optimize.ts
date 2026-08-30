@@ -31,8 +31,8 @@ export interface OptimizeResult {
 function isAnchor(item: Item): boolean {
   if (item.pinned) return true;
   if (!item.place.coord) return true;
-  // 직접 넣은 이동(비행기·신칸센 등)은 앞뒤 장소와 짝이라 자리를 옮기면 안 된다
-  if (item.transport) return true;
+  // 직접 넣은 이동이 붙어 있으면 다음 장소와 짝이라 자리를 옮기면 안 된다
+  if (item.transportToNext) return true;
   return item.category === 'transport' || item.category === 'stay';
 }
 

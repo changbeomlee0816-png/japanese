@@ -1,4 +1,4 @@
-import type { LatLng, TransportInfo, TravelMode } from '../types';
+import type { LatLng, TransportMode, TravelMode } from '../types';
 import { haversine, routeDistance } from './geo';
 import { estimateFare } from './fares';
 
@@ -10,7 +10,7 @@ import { estimateFare } from './fares';
  * 여기서는 이동수단을 고르면 소요시간·거리·요금을 계산해 준다.
  */
 
-export type TransportMode = TransportInfo['mode'];
+export type { TransportMode };
 
 interface Profile {
   label: string;
@@ -28,7 +28,7 @@ interface Profile {
 }
 
 const PROFILES: Record<TransportMode, Profile> = {
-  flight: { label: '비행기', kmh: 620, overheadMin: 150, straight: true, minM: 200000 },
+  flight: { label: '비행기', kmh: 800, overheadMin: 150, straight: true, minM: 200000 },
   train: { label: '기차 · 신칸센', kmh: 190, overheadMin: 25, straight: true, minM: 30000 },
   subway: { label: '지하철 · 전철', kmh: 32, overheadMin: 10, straight: false, minM: 0 },
   bus: { label: '버스', kmh: 28, overheadMin: 12, straight: false, minM: 0 },
@@ -86,7 +86,10 @@ export function estimateTransport(
 ): TransportEstimate {
   const p = PROFILES[mode];
   const distanceM = transportDistance(from, to, mode);
-  const moveMin = Math.round((distanceM / 1000 / p.kmh) * 60);
+  // 비행기는 순항 속도만으로 재면 짧은 노선이 과하게 빨라진다.
+  // 이착륙·지상 활주에 드는 30분을 따로 더한다 (인천→간사이 94분, 김포→하네다 118분).
+  const taxiMin = mode === 'flight' ? 30 : 0;
+  const moveMin = Math.round((distanceM / 1000 / p.kmh) * 60) + taxiMin;
   const durationMin = Math.max(1, moveMin + p.overheadMin);
 
   if (mode === 'flight') {
@@ -124,7 +127,9 @@ export function estimateTransport(
   };
 }
 
-/** 이동 항목의 제목 — "비행기 · 김포 → 하네다" */
-export function transportTitle(info: TransportInfo): string {
-  return `${transportLabel(info.mode)} · ${info.from.name} → ${info.to.name}`;
+/** 이동수단을 기존 Leg 모델의 이동수단으로 옮긴다 (지도·요금 계산이 공유된다) */
+export function toTravelMode(mode: TransportMode): TravelMode {
+  if (mode === 'walk') return 'WALKING';
+  if (mode === 'taxi') return 'DRIVING';
+  return 'TRANSIT';
 }
