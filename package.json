@@ -1,0 +1,27 @@
+{
+  "name": "tabi-travel-planner",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "description": "Apple 스타일 여행 계획 앱 — 구글맵 경로/비용 연동, 현지인 맛집, PDF 내보내기, 실시간 일정 추적",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc -b && vite build",
+    "preview": "vite preview",
+    "typecheck": "tsc -b --noEmit false --emitDeclarationOnly false",
+    "build:artifact": "npm run build && node scripts/build-artifact.mjs",
+    "build:single": "npm run build && node scripts/build-single.mjs"
+  },
+  "dependencies": {
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1"
+  },
+  "devDependencies": {
+    "@types/google.maps": "^3.58.1",
+    "@types/react": "^18.3.12",
+    "@types/react-dom": "^18.3.1",
+    "@vitejs/plugin-react": "^4.3.4",
+    "typescript": "^5.6.3",
+    "vite": "^5.4.11"
+  }
+}
