@@ -1528,3 +1528,93 @@
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
 }
+
+/* ── 이동 항목 ───────────────────────────────────────── */
+
+.mode-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 8px;
+}
+
+.mode-chip {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 5px;
+  padding: 12px 4px;
+  border-radius: var(--r-md);
+  background: var(--card);
+  box-shadow: var(--shadow-1);
+  font-size: 11.5px;
+  font-weight: 500;
+  color: var(--label-2);
+  text-align: center;
+  line-height: 1.25;
+  transition: transform 0.15s var(--ease-spring), background 0.15s var(--ease);
+}
+
+.mode-chip--active {
+  background: var(--blue);
+  color: #fff;
+}
+
+.mode-chip--unfit {
+  opacity: 0.45;
+}
+
+.mode-chip:active {
+  transform: scale(0.94);
+}
+
+.transport-estimate {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  background: color-mix(in srgb, var(--blue) 8%, var(--card));
+  border-radius: var(--r-md);
+  padding: 14px;
+  box-shadow: var(--shadow-1);
+}
+
+.transport-estimate__main {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.transport-estimate__main strong {
+  font-size: 26px;
+  font-weight: 700;
+  letter-spacing: -0.03em;
+  line-height: 1.1;
+}
+
+/* 타임라인의 이동 카드 — 장소 카드와 확실히 구분되게 */
+.stop--transport .stop__card {
+  background: color-mix(in srgb, var(--blue) 6%, var(--card));
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--blue) 18%, transparent), var(--shadow-1);
+}
+
+.stop__dot--transport {
+  border-color: var(--blue);
+  background: var(--blue);
+  color: #fff;
+}
+
+.tstop__badge {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: -0.005em;
+  color: #fff;
+  background: var(--blue);
+  border-radius: 6px;
+  padding: 3px 7px;
+  flex-shrink: 0;
+}
+
+.stop--transport .stop__title {
+  font-size: 15px;
+  font-weight: 550;
+}
