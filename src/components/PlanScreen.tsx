@@ -16,6 +16,8 @@ import { EmptyState, Row, Segmented, Sheet } from './ui';
 import { ExploreSheet } from './ExploreSheet';
 import { TripOverview } from './TripOverview';
 import { SavedShelf } from './SavedShelf';
+import { DayInsights } from './DayInsights';
+import { useWeather } from '../lib/weather';
 import { Icon } from './Icon';
 
 interface Props {
@@ -56,6 +58,9 @@ export function PlanScreen({ trip, settings, dayIndex, onDayChange, bias, onShow
     }
     setPendingDate(null);
   }, [pendingDate, trip.days, onDayChange]);
+
+  /** 여행 기간 날씨 — 예보 범위 밖 날짜는 그냥 빠진다 */
+  const weather = useWeather(bias, trip.days.map((d) => d.date));
 
   const totals = useMemo(() => {
     if (!day) return { spend: 0, transit: 0, minutes: 0, missing: 0 };
@@ -119,6 +124,7 @@ export function PlanScreen({ trip, settings, dayIndex, onDayChange, bias, onShow
         <>
           <TripOverview
             trip={trip}
+            weather={weather}
             readOnly={readOnly}
             onExplore={() => setExplore(true)}
             onOpenDay={(i) => {
@@ -217,6 +223,8 @@ export function PlanScreen({ trip, settings, dayIndex, onDayChange, bias, onShow
       </div>
 
       <LiveBanner day={day} live={live} legs={legs} autoShift={settings.autoShift} />
+
+      <DayInsights trip={trip} day={day} legs={legs} weather={weather.get(day.date)} readOnly={readOnly} />
 
       <div className="section">
         {day.items.length === 0 ? (

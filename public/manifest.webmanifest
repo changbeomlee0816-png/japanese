@@ -1,0 +1,20 @@
+{
+  "name": "Tabi 여행 계획",
+  "short_name": "Tabi",
+  "description": "일정을 넣으면 이동 경로·비용·현지 맛집까지 정리해주는 여행 계획 앱",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#F2F2F7",
+  "theme_color": "#F2F2F7",
+  "lang": "ko",
+  "icons": [
+    {
+      "src": "./icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}

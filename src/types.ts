@@ -41,6 +41,8 @@ export interface Item {
   notes?: string;
   /** 다음 장소로 갈 때 쓰려는 이동수단 */
   modeToNext?: TravelMode;
+  /** 시각을 고정한다 — 예약이 있거나 순서를 바꾸면 안 되는 일정. 동선 최적화가 건드리지 않는다 */
+  pinned?: boolean;
   /** 실시간 추적용 */
   actualStart?: string; // ISO
   actualEnd?: string;   // ISO
