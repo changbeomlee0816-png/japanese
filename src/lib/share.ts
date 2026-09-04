@@ -296,7 +296,7 @@ export type SaveOutcome = 'saved' | 'declined' | 'unavailable';
  * 공유 링크(Artifact) 안에서는 `<a download>`가 동작하지 않으므로 downloads 기능을 쓴다.
  * 직접 호스팅한 경우에는 평범한 blob 링크로 내려받는다.
  */
-export async function saveFile(filename: string, data: string): Promise<SaveOutcome> {
+export async function saveFile(filename: string, data: string | Blob): Promise<SaveOutcome> {
   const claude = (window as unknown as { claude?: ClaudeGlobal }).claude;
   if (claude?.use) {
     try {
@@ -314,7 +314,10 @@ export async function saveFile(filename: string, data: string): Promise<SaveOutc
   }
 
   try {
-    const blob = new Blob([data], { type: filename.endsWith('.json') ? 'application/json' : 'text/html' });
+    const blob =
+      data instanceof Blob
+        ? data
+        : new Blob([data], { type: filename.endsWith('.json') ? 'application/json' : 'text/html' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;

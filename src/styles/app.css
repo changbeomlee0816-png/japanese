@@ -1711,3 +1711,43 @@
   content: '–';
   margin-right: 1px;
 }
+
+/* ── 엑셀 양식 안내 ──────────────────────────────────── */
+
+.sheet-spec {
+  margin-top: 12px;
+  border-radius: var(--r-sm);
+  overflow-x: auto;
+  background: var(--card);
+  box-shadow: var(--shadow-1);
+  font-size: 11.5px;
+}
+
+.sheet-spec__row {
+  display: grid;
+  grid-template-columns: 62px 92px 1fr 1fr 1fr;
+  min-width: 520px;
+}
+
+.sheet-spec__row > span {
+  padding: 7px 9px;
+  border-right: 0.5px solid var(--separator);
+  border-bottom: 0.5px solid var(--separator);
+  color: var(--label-2);
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+
+.sheet-spec__row > span:last-child {
+  border-right: none;
+}
+
+.sheet-spec__row--head > span {
+  background: var(--fill);
+  color: var(--label);
+  font-weight: 600;
+}
+
+.sheet-spec__row:last-child > span {
+  border-bottom: none;
+}

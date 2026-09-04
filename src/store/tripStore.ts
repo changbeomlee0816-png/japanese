@@ -4,6 +4,7 @@ import { uid } from '../lib/id';
 import { addDaysISO, addMinutes, todayISO, toMinutes } from '../lib/time';
 import { createSampleTrip } from '../lib/sample';
 import { defaultDuration, parsePlanText } from '../lib/parsePlan';
+import { importSheetRows, type SheetImportResult } from '../lib/importSheet';
 import { DEFAULT_RATE_TO_KRW } from '../lib/fares';
 import { regionById } from '../data/regions';
 import type { PoiEntry } from '../data/poi';
@@ -747,17 +748,15 @@ export const actions = {
     const result = parsePlanText(text, start);
     if (result.days.length === 0) return result;
 
-    mapActiveTrip((prev) => {
-      if (mode === 'replace') return { ...prev, days: result.days };
-      const byDate = new Map(prev.days.map((d) => [d.date, { ...d, items: [...d.items] }]));
-      for (const parsed of result.days) {
-        const existing = byDate.get(parsed.date);
-        if (existing) existing.items = sortByTime([...existing.items, ...parsed.items]);
-        else byDate.set(parsed.date, parsed);
-      }
-      const days = [...byDate.values()].sort((a, b) => a.date.localeCompare(b.date));
-      return { ...prev, days };
-    });
+    mergeDays(result.days, mode);
+    return result;
+  },
+
+  /** 엑셀 표를 현재 여행에 넣는다 */
+  importSheet(rows: string[][], mode: 'replace' | 'append' = 'append'): SheetImportResult {
+    const trip = state.trips.find((t) => t.id === state.activeTripId);
+    const result = importSheetRows(rows, trip?.days[0]?.date ?? todayISO());
+    if (result.days.length > 0) mergeDays(result.days, mode);
     return result;
   },
 
@@ -781,6 +780,24 @@ export const actions = {
     return JSON.stringify({ trips: state.trips, settings: state.settings }, null, 2);
   },
 };
+
+/**
+ * 새로 읽어들인 날짜들을 현재 여행에 합친다.
+ * 같은 날짜가 이미 있으면 그 날에 이어 붙이고, 없으면 날짜를 새로 만든다.
+ */
+function mergeDays(incoming: Day[], mode: 'replace' | 'append') {
+  mapActiveTrip((prev) => {
+    if (mode === 'replace') return { ...prev, days: incoming };
+    const byDate = new Map(prev.days.map((d) => [d.date, { ...d, items: [...d.items] }]));
+    for (const day of incoming) {
+      const existing = byDate.get(day.date);
+      if (existing) existing.items = sortByTime([...existing.items, ...day.items]);
+      else byDate.set(day.date, day);
+    }
+    const days = [...byDate.values()].sort((a, b) => a.date.localeCompare(b.date));
+    return { ...prev, days };
+  });
+}
 
 /** 공항·역 같은 이름이면 '이동' 분류로 잡는다 */
 function inferPlaceCategory(name: string): Category {
