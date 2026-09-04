@@ -62,7 +62,12 @@ function Stop({ item, index, dayId, currency, live, isLiveDay, onEdit, onFindPla
   return (
     <article className={`stop ${stateClass}`} {...dragProps}>
       <div className="stop__rail">
-        <div className="stop__time mono">{item.startTime}</div>
+        <div className="stop__time mono">
+          {item.startTime}
+          {item.durationMin > 0 && (
+            <span className="stop__time-end">{addMinutes(item.startTime, item.durationMin)}</span>
+          )}
+        </div>
         <button
           type="button"
           className="stop__dot"

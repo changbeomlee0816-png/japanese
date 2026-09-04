@@ -3,7 +3,7 @@ import type { Category, Day, Item, LatLng, PlaceRef, Trip } from '../types';
 import { CATEGORY, CATEGORY_ORDER } from '../lib/category';
 import { actions } from '../store/tripStore';
 import { currencySymbol } from '../lib/fares';
-import { formatDateShort } from '../lib/time';
+import { addMinutes, formatDateShort, toMinutes } from '../lib/time';
 import { defaultDuration } from '../lib/parsePlan';
 import { Sheet, Row, Switch } from './ui';
 import { PlaceSearch } from './PlaceSearch';
@@ -156,6 +156,20 @@ export function ItemEditSheet({ open, trip, day, item, bias, onClose, focusPlace
                 />
               </div>
               <div className="field">
+                <span className="field__label">종료</span>
+                <input
+                  className="input"
+                  type="time"
+                  value={addMinutes(startTime, durationMin)}
+                  onChange={(e) => {
+                    // 종료 시각을 고치면 그 사이가 머무는 시간이 된다 (자정을 넘기면 다음 날로)
+                    const span = (toMinutes(e.target.value) - toMinutes(startTime) + 1440) % 1440;
+                    setDurationMin(span > 0 ? span : 0);
+                  }}
+                  style={{ textAlign: 'right' }}
+                />
+              </div>
+              <div className="field">
                 <span className="field__label">머무는 시간</span>
                 <select
                   className="select"
@@ -169,7 +183,13 @@ export function ItemEditSheet({ open, trip, day, item, bias, onClose, focusPlace
                       {d >= 60 ? `${d / 60}시간${d % 60 ? ` ${d % 60}분` : ''}` : `${d}분`}
                     </option>
                   ))}
-                  {!DURATIONS.includes(durationMin) && <option value="custom">{durationMin}분</option>}
+                  {!DURATIONS.includes(durationMin) && (
+                    <option value="custom">
+                      {durationMin >= 60
+                        ? `${Math.floor(durationMin / 60)}시간${durationMin % 60 ? ` ${durationMin % 60}분` : ''}`
+                        : `${durationMin}분`}
+                    </option>
+                  )}
                 </select>
               </div>
               <div className="field">

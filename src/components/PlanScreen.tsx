@@ -97,6 +97,7 @@ export function PlanScreen({ trip, settings, dayIndex, onDayChange, bias, onShow
     const count = await resolveMissingPlaces(trip, bias, (p) =>
       setResolving(`위치 찾는 중 ${p.done}/${p.total} · ${p.currentTitle}`),
     );
+    actions.completeTransportEstimates();
     setResolving(null);
     if (count === 0) alert('찾지 못했습니다. 항목을 눌러 장소를 직접 검색해 주세요.');
   };

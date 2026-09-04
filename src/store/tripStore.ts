@@ -8,6 +8,7 @@ import { DEFAULT_RATE_TO_KRW } from '../lib/fares';
 import { regionById } from '../data/regions';
 import type { PoiEntry } from '../data/poi';
 import { optimizeDay } from '../lib/optimize';
+import { estimateTransport } from '../lib/transport';
 import type { TransportLeg } from '../types';
 import { isPublishable, knownReadOnly, markDirty, readEmbeddedState } from '../lib/share';
 import { markDirty as cloudMarkDirty } from '../lib/cloud';
@@ -605,6 +606,57 @@ export const actions = {
         return { ...day, items };
       }),
     );
+  },
+
+  /**
+   * 붙여넣기로 들어온 이동 중 거리·시간이 비어 있는 것을 채운다.
+   *
+   * "하카타역 → 다자이후 버스" 처럼 시간을 안 적은 줄은 좌표를 찾기 전에는
+   * 계산할 수 없다. 위치를 다 찾은 뒤에 한 번 돌려서 채운다.
+   * 채우면 그 뒤 일정 시각도 이동 시간만큼 밀어 준다.
+   */
+  completeTransportEstimates(): number {
+    let filled = 0;
+    mapActiveTrip((trip) => ({
+      ...trip,
+      days: trip.days.map((day) => {
+        let touched = false;
+        const items = [...day.items];
+
+        for (let i = 0; i < items.length - 1; i += 1) {
+          const link = items[i].transportToNext;
+          if (!link || link.distanceM > 0) continue;
+          const from = items[i].place.coord;
+          const to = items[i + 1].place.coord;
+          if (!from || !to) continue;
+
+          const est = estimateTransport(from, to, link.mode, trip.currency);
+          const durationMin = link.manualDuration && link.durationMin > 0 ? link.durationMin : est.durationMin;
+          const added = durationMin - link.durationMin;
+
+          items[i] = {
+            ...items[i],
+            transportToNext: {
+              ...link,
+              durationMin,
+              distanceM: est.distanceM,
+              cost: link.cost > 0 ? link.cost : est.fare,
+            },
+          };
+          // 이동 시간이 늘어난 만큼 뒤 일정을 민다
+          if (added !== 0) {
+            for (let j = i + 1; j < items.length; j += 1) {
+              items[j] = { ...items[j], startTime: addMinutes(items[j].startTime, added) };
+            }
+          }
+          touched = true;
+          filled += 1;
+        }
+
+        return touched ? { ...day, items } : day;
+      }),
+    }));
+    return filled;
   },
 
   /** 직접 넣은 이동을 지운다. 장소는 그대로 두고 연결만 끊는다 */
