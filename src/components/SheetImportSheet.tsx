@@ -110,6 +110,7 @@ export function SheetImportSheet({ open, trip, bias, onClose, onImported }: Prop
             <span>도톤보리</span><span>오사카시 주오구 도톤보리</span>
           </div>
         </div>
+        <p className="sheet-spec__hint">다섯 칸입니다 — 좁은 화면에서는 표를 옆으로 밀면 주소 칸이 나옵니다.</p>
         <ul className="paste-help" style={{ paddingLeft: 16, marginTop: 10 }}>
           <li><b>날짜</b>를 비우면 위 행과 같은 날로 봅니다.</li>
           <li><b>시간대</b>를 <code>07:10~09:05</code> 로 적으면 그 사이가 머무는 시간입니다. <code>10:00</code> 만 적어도 됩니다.</li>

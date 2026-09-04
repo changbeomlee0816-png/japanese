@@ -1742,6 +1742,12 @@
   border-right: none;
 }
 
+.sheet-spec__hint {
+  margin: 6px 4px 0;
+  font-size: 12px;
+  color: var(--label-3);
+}
+
 .sheet-spec__row--head > span {
   background: var(--fill);
   color: var(--label);
