@@ -1,6 +1,7 @@
-import type { Category, Day, Item } from '../types';
+import type { Category, Day, Item, TransportMode } from '../types';
 import { uid } from './id';
 import { addDaysISO, addMinutes, fromMinutes, pad, todayISO, toMinutes } from './time';
+import { lookupPoi } from '../data/poi';
 
 /**
  * "대충 적은 일정" 텍스트를 구조화한다.
@@ -45,6 +46,20 @@ const KEYWORD_TIME: Record<string, string> = {
   체크아웃: '10:00',
 };
 
+/** 줄에 적힌 이동수단 — "비행기", "신칸센", "지하철" 같은 말로 찾는다 */
+const TRANSPORT_WORDS: Array<{ mode: TransportMode; words: string[] }> = [
+  { mode: 'flight', words: ['비행기', '항공', '비행', 'flight', '탑승', 'ktx항공'] },
+  { mode: 'train', words: ['신칸센', 'ktx', '고속철', '특급', '기차', '열차', 'train', '하루카', '라피트', 'nex'] },
+  { mode: 'ferry', words: ['페리', '배편', '여객선', 'ferry', '크루즈'] },
+  { mode: 'bus', words: ['버스', '리무진', 'bus'] },
+  { mode: 'taxi', words: ['택시', '렌터카', '자동차', 'taxi', '차량'] },
+  { mode: 'subway', words: ['지하철', '전철', '전차', 'jr', '메트로', 'subway', '모노레일'] },
+  { mode: 'walk', words: ['도보', '걸어서', 'walk'] },
+];
+
+/** "A → B" 형태의 화살표 */
+const ARROW = /\s*(?:→|->|=>|➔|➡|▶|>>)\s*/;
+
 const CATEGORY_RULES: Array<{ cat: Category; words: string[] }> = [
   { cat: 'transport', words: ['공항', '역', '터미널', '버스', '신칸센', '기차', '페리', '렌터카', 'airport', 'station'] },
   { cat: 'stay', words: ['호텔', '숙소', '료칸', '체크인', '체크아웃', '게스트하우스', 'hotel', 'airbnb'] },
@@ -54,6 +69,15 @@ const CATEGORY_RULES: Array<{ cat: Category; words: string[] }> = [
   { cat: 'activity', words: ['체험', '온천', '스파', '유람선', '공연', '콘서트', '클래스', '수업', '티켓', '입장', '놀이공원', '디즈니', '유니버설'] },
   { cat: 'sight', words: ['신사', '절', '사찰', '공원', '전망대', '박물관', '미술관', '성', '타워', '거리', '시장', '관광'] },
 ];
+
+/** 줄에서 이동수단을 찾는다. 없으면 null */
+function findTransportMode(text: string): TransportMode | null {
+  const lower = text.toLowerCase();
+  for (const rule of TRANSPORT_WORDS) {
+    if (rule.words.some((w) => lower.includes(w))) return rule.mode;
+  }
+  return null;
+}
 
 export function inferCategory(text: string): Category {
   const lower = text.toLowerCase();
@@ -65,35 +89,83 @@ export function inferCategory(text: string): Category {
 
 interface ParsedTime {
   time?: string;
+  /** 종료 시각이 함께 적힌 경우의 체류·이동 시간(분) */
+  durationMin?: number;
   rest: string;
 }
 
-/** 줄 앞머리에서 시각을 뽑아낸다 */
-function extractTime(raw: string): ParsedTime {
-  let text = raw;
+/**
+ * 문장 앞에서 시각 하나를 읽는다.
+ * "10:00", "오후 2시", "14시 30분", "9시반" 을 모두 받아 분 단위로 돌려준다.
+ */
+function parseClock(text: string): { minutes: number; length: number; hasMarker: boolean } | null {
+  const m = text.match(
+    /^\s*(오전|오후|am|pm)?\s*(\d{1,2})\s*(?::|시)\s*(반|\d{1,2})?\s*분?\s*(오전|오후|am|pm)?/i,
+  );
+  if (!m) return null;
 
-  // 10:00 / 10시 30분 / 10시
-  const explicit = text.match(/^(오전|오후|am|pm)?\s*(\d{1,2})\s*(?::|시)\s*(\d{1,2})?\s*분?\s*(오전|오후|am|pm)?/i);
-  if (explicit) {
-    let hour = Number(explicit[2]);
-    const minute = Number(explicit[3] ?? 0);
-    const marker = (explicit[1] ?? explicit[4] ?? '').toLowerCase();
-    if ((marker === '오후' || marker === 'pm') && hour < 12) hour += 12;
-    if ((marker === '오전' || marker === 'am') && hour === 12) hour = 0;
-    if (hour <= 29 && minute < 60) {
-      text = text.slice(explicit[0].length).replace(/^[\s:~\-–]+/, '');
-      return { time: `${pad(hour % 24)}:${pad(minute)}`, rest: text };
+  let hour = Number(m[2]);
+  const minute = m[3] === '반' ? 30 : Number(m[3] ?? 0);
+  const marker = (m[1] ?? m[4] ?? '').toLowerCase();
+  if ((marker === '오후' || marker === 'pm') && hour < 12) hour += 12;
+  if ((marker === '오전' || marker === 'am') && hour === 12) hour = 0;
+  if (hour > 29 || minute > 59) return null;
+
+  return { minutes: (hour % 24) * 60 + minute, length: m[0].length, hasMarker: !!marker };
+}
+
+/** 시각 뒤에 오는 범위 구분자 — "07:10 ~ 09:05", "9시-11시", "10:00부터 12:00까지" */
+const RANGE_SEP = /^\s*(?:~+|-|–|—|to|부터|에서)\s*/i;
+
+/**
+ * 줄 앞머리에서 시각(과 범위)을 뽑아낸다.
+ *
+ * "07:10 ~ 09:05 아사쿠사" 처럼 범위를 적으면 그 사이가 그 장소에 머무는 시간,
+ * 이동 줄이라면 이동에 걸리는 시간이 된다.
+ */
+function extractTime(raw: string): ParsedTime {
+  const first = parseClock(raw);
+
+  if (first) {
+    const afterFirst = raw.slice(first.length);
+    const sep = afterFirst.match(RANGE_SEP);
+
+    if (sep) {
+      const second = parseClock(afterFirst.slice(sep[0].length));
+      if (second) {
+        // "오후 2시 ~ 3시반" 처럼 끝 시각에 오전/오후가 없으면 시작과 같은 반나절로 본다.
+        // 그러지 않으면 14:00~03:30 이 되어 13시간짜리 일정이 된다.
+        let endMin = second.minutes;
+        if (!second.hasMarker && endMin < first.minutes && endMin + 720 > first.minutes) {
+          endMin += 720;
+        }
+        // 그래도 이르면 자정을 넘긴 것으로 본다 (23:00 ~ 01:00)
+        const span = (endMin - first.minutes + 1440) % 1440;
+        const rest = afterFirst
+          .slice(sep[0].length + second.length)
+          .replace(/^\s*(까지|사이)?\s*[:,\-–]?\s*/, '');
+        return {
+          time: fromMinutes(first.minutes),
+          durationMin: span > 0 ? span : undefined,
+          rest,
+        };
+      }
     }
+
+    return {
+      time: fromMinutes(first.minutes),
+      rest: afterFirst.replace(/^[\s:,~\-–]+/, ''),
+    };
   }
 
   // 아침/점심/저녁 같은 키워드
   for (const [word, time] of Object.entries(KEYWORD_TIME)) {
-    if (text.startsWith(word)) {
-      const rest = text.slice(word.length).replace(/^[\s:~\-–]+/, '');
+    if (raw.startsWith(word)) {
+      const rest = raw.slice(word.length).replace(/^[\s:~\-–]+/, '');
       return { time, rest: rest || word };
     }
   }
-  return { rest: text };
+  return { rest: raw };
 }
 
 /** (90분), [2시간], 90min 등 체류시간 */
@@ -188,8 +260,7 @@ export function parsePlanText(text: string, startDate = todayISO()): ParseResult
       // "9/12 도쿄 도착" 처럼 헤더 뒤에 내용이 붙는 경우를 위해 나머지를 항목으로도 본다
       const tail = line.replace(/^[#\-*•\s]+/, '').replace(/^\S+\s*/, '').trim();
       if (tail && /\d{1,2}\s*[:시]/.test(tail)) {
-        const item = lineToItem(tail);
-        if (item) current.items.push(item);
+        current.items.push(...lineToItems(tail));
       }
       continue;
     }
@@ -197,8 +268,8 @@ export function parsePlanText(text: string, startDate = todayISO()): ParseResult
     const cleaned = line.replace(/^[-*•·▪>\s]+/, '').replace(/^\d+[.)]\s*/, '').trim();
     if (!cleaned) continue;
 
-    const item = lineToItem(cleaned);
-    if (item) ensureBucket().items.push(item);
+    const parsed = lineToItems(cleaned);
+    if (parsed.length > 0) ensureBucket().items.push(...parsed);
     else warnings.push(`해석하지 못한 줄: "${line}"`);
   }
 
@@ -231,29 +302,105 @@ export function parsePlanText(text: string, startDate = todayISO()): ParseResult
   };
 }
 
-/** 한 줄을 항목으로. 제목이 비면 null */
-function lineToItem(line: string): Item | null {
-  const { time, rest: afterTime } = extractTime(line);
-  const { durationMin, rest: afterDuration } = extractDuration(afterTime);
+/**
+ * 한 줄을 항목으로 바꾼다. 해석하지 못하면 빈 배열.
+ *
+ * 보통은 항목 하나지만, "인천공항 → 간사이공항 비행기" 같은 이동 줄은
+ * 출발지·도착지 두 장소와 그 사이를 잇는 이동으로 풀어 낸다.
+ */
+function lineToItems(line: string): Item[] {
+  const { time, durationMin: rangeMin, rest: afterTime } = extractTime(line);
+  // 범위로 시간을 적었으면 그 값이 우선이다
+  const { durationMin: explicitMin, rest: afterDuration } =
+    rangeMin === undefined ? extractDuration(afterTime) : { durationMin: undefined, rest: afterTime };
   const { cost, rest: afterCost } = extractCost(afterDuration);
 
   const tagMatch = afterCost.match(/#(\S+)/);
-  let title = afterCost.replace(/#\S+/g, '').replace(/\s{2,}/g, ' ').replace(/[,\s]+$/, '').trim();
-  title = title.replace(/^[:\-–~]\s*/, '');
+  let body = afterCost.replace(/#\S+/g, '').replace(/\s{2,}/g, ' ').replace(/[,\s]+$/, '').trim();
+  body = body.replace(/^[:\-–~]\s*/, '');
 
-  if (!title) return null;
+  if (!body) return [];
 
-  const category = inferCategory(`${title} ${tagMatch?.[1] ?? ''} ${line}`);
+  const mode = findTransportMode(`${body} ${tagMatch?.[1] ?? ''}`);
+  const arrowParts = body.split(ARROW);
 
-  return {
-    id: uid('item'),
-    title,
-    category,
-    place: { name: title },
-    startTime: time ?? '',
-    durationMin: durationMin ?? defaultDuration(category),
-    cost: cost ?? 0,
-  };
+  // ── 이동 줄: "A → B"
+  if (arrowParts.length === 2) {
+    const strip = (t: string) =>
+      TRANSPORT_WORDS.flatMap((r) => r.words)
+        .reduce((acc, w) => acc.replace(new RegExp(w, 'gi'), ''), t)
+        .replace(/[()[\]]/g, ' ')
+        .replace(/\s{2,}/g, ' ')
+        .trim();
+
+    const fromName = strip(arrowParts[0]);
+    const toName = strip(arrowParts[1]);
+    if (fromName && toName) {
+      const travelMin = rangeMin ?? explicitMin;
+      const fromDefaults = placeDefaults(fromName);
+      const toDefaults = placeDefaults(toName);
+      const from: Item = {
+        id: uid('item'),
+        title: fromName,
+        category: fromDefaults.category,
+        place: { name: fromName },
+        startTime: time ?? '',
+        // 출발지는 곧바로 떠나므로 머무는 시간을 두지 않는다
+        durationMin: 0,
+        cost: 0,
+        transportToNext: {
+          mode: mode ?? 'subway',
+          // 시간을 안 적었으면 좌표를 찾은 뒤 거리로 계산한다
+          durationMin: travelMin ?? 0,
+          cost: cost ?? 0,
+          distanceM: 0,
+          manualDuration: travelMin !== undefined,
+        },
+      };
+      const to: Item = {
+        id: uid('item'),
+        title: toName,
+        category: toDefaults.category,
+        place: { name: toName },
+        startTime: time && travelMin ? addMinutes(time, travelMin) : '',
+        // 공항·역은 도착해서 바로 움직이지만, 관광지면 보통 머무는 시간을 잡아 준다
+        durationMin: toDefaults.category === 'transport' ? 0 : toDefaults.stayMin,
+        cost: 0,
+      };
+      return [from, to];
+    }
+  }
+
+  const defaults = placeDefaults(body);
+  // 태그나 문장에 분류가 드러나면 그쪽을 따른다 (#식사 등)
+  const hinted = tagMatch?.[1] ? inferCategory(tagMatch[1]) : null;
+  const category = hinted ?? defaults.category;
+
+  return [
+    {
+      id: uid('item'),
+      title: body,
+      category,
+      place: { name: body },
+      startTime: time ?? '',
+      durationMin: rangeMin ?? explicitMin ?? defaults.stayMin,
+      cost: cost ?? 0,
+    },
+  ];
+}
+
+/**
+ * 이 이름의 장소를 내장 사전에서 찾아 분류와 보통 머무는 시간을 가져온다.
+ * 사전에 없으면 글자에서 추론한다.
+ */
+function placeDefaults(name: string): { category: Category; stayMin: number } {
+  const poi = lookupPoi(name);
+  if (poi) {
+    const category = poi.category ?? inferCategory(name);
+    return { category, stayMin: poi.stayMin ?? defaultDuration(category) };
+  }
+  const category = inferCategory(name);
+  return { category, stayMin: defaultDuration(category) };
 }
 
 export function defaultDuration(category: Category): number {
@@ -279,23 +426,50 @@ export function defaultDuration(category: Category): number {
  * 시간이 비어 있는 항목을 앞뒤 맥락으로 채운다.
  * 앞 항목 종료 + 이동 30분을 기본 간격으로 잡는다.
  */
+/**
+ * 시각이 비어 있는 항목을 앞뒤 맥락으로 채운다.
+ *
+ * 이동으로 이어진 두 장소는 한 덩어리로 다룬다. 시각순으로 정렬할 때
+ * "출발지 → 도착지" 짝이 갈라지면 안 되기 때문이다.
+ */
 function fillMissingTimes(items: Item[]): Item[] {
   if (items.length === 0) return items;
   const GAP = 30;
-  const out = [...items];
 
-  // 첫 항목이 비면 09:00부터 시작
-  let cursor = out[0].startTime || '09:00';
-  for (let i = 0; i < out.length; i += 1) {
-    if (out[i].startTime) {
-      cursor = out[i].startTime;
-    } else {
-      out[i] = { ...out[i], startTime: cursor };
+  // 이동으로 묶인 항목들을 한 덩어리로 만든다
+  const groups: Item[][] = [];
+  for (let i = 0; i < items.length; i += 1) {
+    const group = [items[i]];
+    while (items[i].transportToNext && items[i + 1]) {
+      i += 1;
+      group.push(items[i]);
     }
-    cursor = addMinutes(cursor, out[i].durationMin + GAP);
+    groups.push(group);
   }
 
-  // 시각이 역행하면(자정 넘김 등) 정렬만 맞춰 준다
-  out.sort((a, b) => toMinutes(a.startTime) - toMinutes(b.startTime));
-  return out.map((it) => ({ ...it, startTime: fromMinutes(toMinutes(it.startTime)) }));
+  // 시각이 없는 덩어리는 앞 덩어리의 시각을 이어받는다.
+  // 그래야 정렬 기준이 모든 덩어리에 있어 비교가 일관되고, 쓴 자리도 지켜진다.
+  let carried = groups[0]?.[0].startTime || '09:00';
+  const withOrder = groups.map((g, i) => {
+    if (g[0].startTime) carried = g[0].startTime;
+    return { g, i, at: toMinutes(carried) };
+  });
+  withOrder.sort((a, b) => (a.at !== b.at ? a.at - b.at : a.i - b.i));
+
+  const out: Item[] = [];
+  let cursor = withOrder[0]?.g[0].startTime || '09:00';
+
+  for (const { g } of withOrder) {
+    for (let i = 0; i < g.length; i += 1) {
+      const item = g[i];
+      const startTime = item.startTime || cursor;
+      out.push({ ...item, startTime });
+
+      // 이동으로 이어지면 이동 시간만큼, 아니면 기본 간격만큼 띄운다
+      const link = item.transportToNext;
+      cursor = addMinutes(startTime, item.durationMin + (link ? link.durationMin : GAP));
+    }
+  }
+
+  return out;
 }
