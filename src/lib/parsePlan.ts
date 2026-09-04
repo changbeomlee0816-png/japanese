@@ -193,6 +193,11 @@ function extractCost(text: string): { cost?: number; rest: string } {
   return { cost: value, rest: text.replace(m[0], ' ').replace(/[()[\]]/g, ' ').trim() };
 }
 
+export function parseDateCell(text: string): string | null {
+  const hit = isDayHeader(text.trim());
+  return hit && hit.kind === 'date' ? hit.date : null;
+}
+
 function isDayHeader(line: string): { kind: 'date'; date: string } | { kind: 'index'; index: number } | null {
   const t = line.replace(/^[#\-*•\s]+/, '').trim();
   const year = new Date().getFullYear();
@@ -260,7 +265,7 @@ export function parsePlanText(text: string, startDate = todayISO()): ParseResult
       // "9/12 도쿄 도착" 처럼 헤더 뒤에 내용이 붙는 경우를 위해 나머지를 항목으로도 본다
       const tail = line.replace(/^[#\-*•\s]+/, '').replace(/^\S+\s*/, '').trim();
       if (tail && /\d{1,2}\s*[:시]/.test(tail)) {
-        current.items.push(...lineToItems(tail));
+        current.items.push(...parsePlanLine(tail));
       }
       continue;
     }
@@ -268,7 +273,7 @@ export function parsePlanText(text: string, startDate = todayISO()): ParseResult
     const cleaned = line.replace(/^[-*•·▪>\s]+/, '').replace(/^\d+[.)]\s*/, '').trim();
     if (!cleaned) continue;
 
-    const parsed = lineToItems(cleaned);
+    const parsed = parsePlanLine(cleaned);
     if (parsed.length > 0) ensureBucket().items.push(...parsed);
     else warnings.push(`해석하지 못한 줄: "${line}"`);
   }
@@ -308,7 +313,7 @@ export function parsePlanText(text: string, startDate = todayISO()): ParseResult
  * 보통은 항목 하나지만, "인천공항 → 간사이공항 비행기" 같은 이동 줄은
  * 출발지·도착지 두 장소와 그 사이를 잇는 이동으로 풀어 낸다.
  */
-function lineToItems(line: string): Item[] {
+export function parsePlanLine(line: string): Item[] {
   const { time, durationMin: rangeMin, rest: afterTime } = extractTime(line);
   // 범위로 시간을 적었으면 그 값이 우선이다
   const { durationMin: explicitMin, rest: afterDuration } =
@@ -432,7 +437,7 @@ export function defaultDuration(category: Category): number {
  * 이동으로 이어진 두 장소는 한 덩어리로 다룬다. 시각순으로 정렬할 때
  * "출발지 → 도착지" 짝이 갈라지면 안 되기 때문이다.
  */
-function fillMissingTimes(items: Item[]): Item[] {
+export function fillMissingTimes(items: Item[]): Item[] {
   if (items.length === 0) return items;
   const GAP = 30;
 
