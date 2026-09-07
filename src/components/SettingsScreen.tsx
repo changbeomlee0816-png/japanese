@@ -11,6 +11,7 @@ import { NewTripSheet, RegionGrid } from './NewTripSheet';
 import { findRegion } from '../data/regions';
 import { DEFAULT_RATE_TO_KRW } from '../lib/fares';
 import { useCloud } from '../lib/cloud';
+import { AI_MODELS } from '../lib/aiPlan';
 import { Icon } from './Icon';
 
 interface Props {
@@ -23,6 +24,7 @@ export function SettingsScreen({ trip, settings, readOnly = false }: Props) {
   const { trips } = useStore();
   const cloud = useCloud();
   const [keyDraft, setKeyDraft] = useState(settings.googleMapsApiKey);
+  const [aiKeyDraft, setAiKeyDraft] = useState(settings.anthropicApiKey);
   const [tripSheet, setTripSheet] = useState(false);
   const [regionSheet, setRegionSheet] = useState(false);
   const [regionQuery, setRegionQuery] = useState('');
@@ -33,6 +35,10 @@ export function SettingsScreen({ trip, settings, readOnly = false }: Props) {
     actions.updateSettings({ googleMapsApiKey: keyDraft.trim() });
     clearLegCache();
     if (keyDraft.trim() && !mapsLoaded()) window.location.reload();
+  };
+
+  const saveAiKey = () => {
+    actions.updateSettings({ anthropicApiKey: aiKeyDraft.trim() });
   };
 
   const requestNotifications = async () => {
@@ -113,6 +119,58 @@ export function SettingsScreen({ trip, settings, readOnly = false }: Props) {
           <strong> Maps JavaScript API</strong>, <strong>Places API (New)</strong>, <strong>Directions API</strong>를
           켠 뒤 키를 만들고, HTTP 리퍼러 제한을 걸어두는 걸 권합니다.
           키 없이도 거리 기반 추정과 내장 장소·맛집 데이터로 앱 전체가 동작합니다.
+        </p>
+      </div>
+
+      <div className="section">
+        <div className="section__header">
+          <span className="section__title">AI 자동 계획</span>
+          <span className={`badge ${settings.anthropicApiKey ? 'badge--green' : ''}`}>
+            {settings.anthropicApiKey ? 'Claude' : '내장 사전'}
+          </span>
+        </div>
+        <div className="list">
+          <div className="field">
+            <span className="field__label">Claude API 키</span>
+            <input
+              className="input"
+              type="password"
+              value={aiKeyDraft}
+              onChange={(e) => setAiKeyDraft(e.target.value)}
+              placeholder="sk-ant-..."
+              autoComplete="off"
+              spellCheck={false}
+            />
+          </div>
+          <Row label="키 저장" accent onClick={saveAiKey} />
+          {settings.anthropicApiKey && (
+            <Row
+              label="키 삭제"
+              danger
+              onClick={() => {
+                actions.updateSettings({ anthropicApiKey: '' });
+                setAiKeyDraft('');
+              }}
+            />
+          )}
+        </div>
+        {settings.anthropicApiKey && (
+          <div style={{ marginTop: 12 }}>
+            <Segmented
+              value={settings.aiModel}
+              onChange={(v) => actions.updateSettings({ aiModel: v })}
+              options={AI_MODELS.map((m) => ({ value: m.id as string, label: m.label }))}
+            />
+            <p className="muted tiny" style={{ padding: '8px 4px 0' }}>
+              {AI_MODELS.find((m) => m.id === settings.aiModel)?.hint}
+            </p>
+          </div>
+        )}
+        <p className="muted tiny" style={{ padding: '10px 4px 0', lineHeight: 1.6 }}>
+          키는 이 브라우저에만 저장되고 <strong>api.anthropic.com</strong> 외에는 어디에도 가지 않습니다.
+          공유 링크에는 일정만 실리므로 키가 함께 넘어가지 않습니다.
+          <strong> console.anthropic.com</strong> 에서 키를 만들 수 있고, 사용한 만큼 본인 계정에 요금이 붙습니다.
+          키가 없어도 내장 장소 사전으로 일정을 짜 줍니다.
         </p>
       </div>
 

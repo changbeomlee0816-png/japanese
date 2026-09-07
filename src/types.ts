@@ -151,6 +151,10 @@ export interface Restaurant {
 
 export interface Settings {
   googleMapsApiKey: string;
+  /** Claude API 키 — AI 자동 계획에만 쓴다. 이 브라우저에만 저장된다 */
+  anthropicApiKey: string;
+  /** AI 자동 계획에 쓸 모델 */
+  aiModel: string;
   /** 실제 시작이 밀리면 이후 일정을 자동으로 밀어줄지 */
   autoShift: boolean;
   /** 출발 알림을 몇 분 전에 띄울지 */

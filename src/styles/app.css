@@ -1757,3 +1757,81 @@
 .sheet-spec__row:last-child > span {
   border-bottom: none;
 }
+
+/* ── AI 자동 계획 ────────────────────────────────────── */
+
+.taste-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.taste-chip {
+  padding: 10px 6px;
+  border-radius: var(--r-sm);
+  background: var(--card);
+  box-shadow: var(--shadow-1);
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--label-2);
+  transition: transform 0.15s var(--ease-spring), background 0.15s var(--ease);
+}
+
+.taste-chip--on {
+  background: var(--blue);
+  color: #fff;
+}
+
+.taste-chip:active {
+  transform: scale(0.94);
+}
+
+.draft-summary {
+  padding: 12px 16px;
+  border-radius: var(--r-md);
+  background: var(--card);
+  box-shadow: var(--shadow-1);
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.draft-item {
+  display: flex;
+  gap: 10px;
+  padding: 8px 16px;
+  align-items: baseline;
+}
+
+.draft-item__time {
+  flex-shrink: 0;
+  width: 46px;
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+  color: var(--label-2);
+}
+
+.draft-item__body {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.draft-item__title {
+  font-size: 15px;
+}
+
+.draft-item__note {
+  font-size: 12px;
+  color: var(--label-3);
+  line-height: 1.45;
+}
+
+.linkish {
+  color: var(--blue);
+  font-weight: 500;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
