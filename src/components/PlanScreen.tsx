@@ -19,6 +19,7 @@ import { SavedShelf } from './SavedShelf';
 import { DayInsights } from './DayInsights';
 import { TransportSheet } from './TransportSheet';
 import { SheetImportSheet } from './SheetImportSheet';
+import { AutoPlanSheet } from './AutoPlanSheet';
 import { useWeather } from '../lib/weather';
 import { Icon } from './Icon';
 
@@ -46,6 +47,7 @@ export function PlanScreen({ trip, settings, dayIndex, onDayChange, bias, onShow
   const [explore, setExplore] = useState(false);
   const [transport, setTransport] = useState(false);
   const [sheetImport, setSheetImport] = useState(false);
+  const [autoPlan, setAutoPlan] = useState(false);
   /** 전체 윤곽을 먼저 보고 하루를 파고드는 흐름 */
   const [view, setView] = useState<'overview' | 'day'>('overview');
   const [dayMenu, setDayMenu] = useState(false);
@@ -141,7 +143,8 @@ export function PlanScreen({ trip, settings, dayIndex, onDayChange, bias, onShow
           {!readOnly && (
             <div className="section">
               <div className="list">
-                <Row label="메모한 일정 붙여넣기" icon="sparkles" accent onClick={() => setQuickAdd(true)} />
+                <Row label="AI로 일정 짜기" icon="sparkles" accent onClick={() => setAutoPlan(true)} />
+                <Row label="메모한 일정 붙여넣기" icon="plan" accent onClick={() => setQuickAdd(true)} />
                 <Row label="엑셀로 한 번에 넣기" icon="list" accent onClick={() => setSheetImport(true)} />
                 <Row label="PDF로 내보내기" icon="printer" accent onClick={onPrint} />
               </div>
@@ -285,7 +288,8 @@ export function PlanScreen({ trip, settings, dayIndex, onDayChange, bias, onShow
         <div className="section">
           <div className="list">
             {!readOnly && <Row label="이동 추가 (비행기 · 신칸센 등)" icon="plane" accent onClick={() => setTransport(true)} />}
-            {!readOnly && <Row label="이 지역 둘러보기" icon="sparkles" accent onClick={() => setExplore(true)} />}
+            {!readOnly && <Row label="AI로 일정 짜기" icon="sparkles" accent onClick={() => setAutoPlan(true)} />}
+            {!readOnly && <Row label="이 지역 둘러보기" icon="star" accent onClick={() => setExplore(true)} />}
             {!readOnly && <Row label="메모한 일정 붙여넣기" icon="plan" accent onClick={() => setQuickAdd(true)} />}
             {!readOnly && <Row label="엑셀로 한 번에 넣기" icon="list" accent onClick={() => setSheetImport(true)} />}
             <Row label="PDF로 내보내기" icon="printer" accent onClick={onPrint} />
@@ -312,6 +316,15 @@ export function PlanScreen({ trip, settings, dayIndex, onDayChange, bias, onShow
           onClose={() => setEditing(null)}
         />
       )}
+
+      <AutoPlanSheet
+        open={autoPlan}
+        trip={trip}
+        settings={settings}
+        bias={bias}
+        onClose={() => setAutoPlan(false)}
+        onImported={(date) => { setPendingDate(date); setView('day'); }}
+      />
 
       <SheetImportSheet
         open={sheetImport}

@@ -5,6 +5,8 @@ import { addDaysISO, addMinutes, todayISO, toMinutes } from '../lib/time';
 import { createSampleTrip } from '../lib/sample';
 import { defaultDuration, parsePlanText } from '../lib/parsePlan';
 import { importSheetRows, type SheetImportResult } from '../lib/importSheet';
+import type { PlanDraft } from '../lib/autoPlan';
+import { DEFAULT_AI_MODEL } from '../lib/aiPlan';
 import { DEFAULT_RATE_TO_KRW } from '../lib/fares';
 import { regionById } from '../data/regions';
 import type { PoiEntry } from '../data/poi';
@@ -33,6 +35,8 @@ const linkedId = linkedTripId();
 
 export const DEFAULT_SETTINGS: Settings = {
   googleMapsApiKey: '',
+  anthropicApiKey: '',
+  aiModel: DEFAULT_AI_MODEL,
   autoShift: true,
   departureAlertMin: 15,
   notificationsEnabled: false,
@@ -750,6 +754,34 @@ export const actions = {
 
     mergeDays(result.days, mode);
     return result;
+  },
+
+  /**
+   * AI(또는 규칙 엔진)가 짠 초안을 현재 여행에 넣는다.
+   *
+   * 좌표는 여기서 붙이지 않는다 — 붙여넣기·엑셀과 마찬가지로
+   * 가져온 뒤 resolveMissingPlaces 가 한 번에 찾는다.
+   */
+  importDraft(draft: PlanDraft, mode: 'replace' | 'append' = 'append'): Day[] {
+    const days: Day[] = draft.days
+      .filter((d) => d.items.length > 0)
+      .map((d) => ({
+        id: uid('day'),
+        date: d.date,
+        title: d.title,
+        items: d.items.map((it) => ({
+          id: uid('item'),
+          title: it.title,
+          category: it.category,
+          place: { name: it.title, address: it.address },
+          startTime: it.startTime,
+          durationMin: it.durationMin,
+          cost: it.cost,
+          notes: it.notes,
+        })),
+      }));
+    if (days.length > 0) mergeDays(days, mode);
+    return days;
   },
 
   /** 엑셀 표를 현재 여행에 넣는다 */
