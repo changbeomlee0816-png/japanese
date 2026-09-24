@@ -11,7 +11,7 @@ import { NewTripSheet, RegionGrid } from './NewTripSheet';
 import { findRegion } from '../data/regions';
 import { DEFAULT_RATE_TO_KRW } from '../lib/fares';
 import { useCloud } from '../lib/cloud';
-import { AI_MODELS } from '../lib/aiPlan';
+import { AI_MODELS } from '../lib/claude';
 import { Icon } from './Icon';
 
 interface Props {
@@ -124,7 +124,7 @@ export function SettingsScreen({ trip, settings, readOnly = false }: Props) {
 
       <div className="section">
         <div className="section__header">
-          <span className="section__title">AI 자동 계획</span>
+          <span className="section__title">Claude (AI 일정 · 번역)</span>
           <span className={`badge ${settings.anthropicApiKey ? 'badge--green' : ''}`}>
             {settings.anthropicApiKey ? 'Claude' : '내장 사전'}
           </span>
@@ -170,7 +170,8 @@ export function SettingsScreen({ trip, settings, readOnly = false }: Props) {
           키는 이 브라우저에만 저장되고 <strong>api.anthropic.com</strong> 외에는 어디에도 가지 않습니다.
           공유 링크에는 일정만 실리므로 키가 함께 넘어가지 않습니다.
           <strong> console.anthropic.com</strong> 에서 키를 만들 수 있고, 사용한 만큼 본인 계정에 요금이 붙습니다.
-          키가 없어도 내장 장소 사전으로 일정을 짜 줍니다.
+          키를 넣으면 AI 일정 짜기·경로 펼치기·번역(사진 포함)에 Claude 를 씁니다.
+          키가 없어도 내장 장소 사전·무료 번역·회화집으로 모두 동작합니다. 사진 번역에 쓴 사진은 Claude 에만 보내고 저장하지 않습니다.
         </p>
       </div>
 

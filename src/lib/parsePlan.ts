@@ -15,14 +15,16 @@ import { lookupPoi } from '../data/poi';
  */
 
 const DAY_HEADER_PATTERNS: RegExp[] = [
-  /^(\d{4})[-./](\d{1,2})[-./](\d{1,2})/,           // 2026-09-12
-  /^(\d{1,2})[/.](\d{1,2})\s*(?:\(|$|일|:)/,          // 9/12
+  /^(\d{4})[-./년]\s*(\d{1,2})[-./월]\s*(\d{1,2})/,     // 2026-09-12, 2026년 9월 12일
+  /^(\d{1,2})[/.](\d{1,2})(?=\s*(?:\(|（|$|일|:|[월화수목금토일](?:요일)?(?:\s|$)|[月火水木金土日]))/, // 9/12, 9/12 (토), 9/12 토
   /^(\d{1,2})월\s*(\d{1,2})일/,                       // 9월 12일
+  /^(\d{1,2})月\s*(\d{1,2})日/,                       // 9月12日
 ];
 
 const DAY_INDEX_PATTERNS: RegExp[] = [
   /^day\s*(\d+)/i,
   /^(\d+)\s*일\s*차/,
+  /^(\d+)\s*日目/,
   /^d\s*[-]?\s*(\d+)\b/i,
 ];
 
@@ -69,6 +71,16 @@ const CATEGORY_RULES: Array<{ cat: Category; words: string[] }> = [
   { cat: 'activity', words: ['체험', '온천', '스파', '유람선', '공연', '콘서트', '클래스', '수업', '티켓', '입장', '놀이공원', '디즈니', '유니버설'] },
   { cat: 'sight', words: ['신사', '절', '사찰', '공원', '전망대', '박물관', '미술관', '성', '타워', '거리', '시장', '관광'] },
 ];
+
+/** 글에 적힌 이동수단 낱말 ("비행기", "신칸센") — 다른 칸에 적힌 수단을 이동 줄로 옮길 때 쓴다 */
+export function findTransportWord(text: string): string | null {
+  const lower = text.toLowerCase();
+  for (const rule of TRANSPORT_WORDS) {
+    const hit = rule.words.find((w) => lower.includes(w));
+    if (hit) return hit;
+  }
+  return null;
+}
 
 /** 줄에서 이동수단을 찾는다. 없으면 null */
 function findTransportMode(text: string): TransportMode | null {
@@ -191,6 +203,16 @@ function extractCost(text: string): { cost?: number; rest: string } {
   const value = Number(m[1].replace(/,/g, ''));
   if (!Number.isFinite(value) || value <= 0) return { rest: text };
   return { cost: value, rest: text.replace(m[0], ' ').replace(/[()[\]]/g, ' ').trim() };
+}
+
+/** 칸 하나에서 시각(과 범위)을 읽는다 — 자유 양식 엑셀의 칸 판별에 쓴다 */
+export function readClockCell(text: string): { time?: string; durationMin?: number; rest: string } {
+  return extractTime(text.trim());
+}
+
+/** 칸 하나가 날짜("9/12")나 순번("2일차")인지 */
+export function readDayCell(text: string): { kind: 'date'; date: string } | { kind: 'index'; index: number } | null {
+  return isDayHeader(text.trim());
 }
 
 export function parseDateCell(text: string): string | null {
@@ -355,6 +377,7 @@ export function parsePlanLine(line: string): Item[] {
         cost: 0,
         transportToNext: {
           mode: mode ?? 'subway',
+          autoMode: mode ? undefined : true,
           // 시간을 안 적었으면 좌표를 찾은 뒤 거리로 계산한다
           durationMin: travelMin ?? 0,
           cost: cost ?? 0,

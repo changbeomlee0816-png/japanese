@@ -7,7 +7,8 @@ export type IconName =
   | 'clock' | 'check' | 'circle' | 'checkCircle'
   | 'share' | 'trash' | 'copy' | 'pencil' | 'pin' | 'sparkles'
   | 'bell' | 'printer' | 'search' | 'star' | 'list' | 'calendar'
-  | 'play' | 'flag' | 'warning' | 'info' | 'drag';
+  | 'play' | 'flag' | 'warning' | 'info' | 'drag'
+  | 'translate' | 'camera' | 'mic' | 'volume' | 'swap' | 'expand' | 'image';
 
 const PATHS: Record<IconName, string> = {
   plan: 'M8 6h13M8 12h13M8 18h13M3.5 6h.01M3.5 12h.01M3.5 18h.01',
@@ -48,6 +49,13 @@ const PATHS: Record<IconName, string> = {
   warning: 'M12 9v4.5m0 3h.01M10.3 3.9 2.6 17.2a2 2 0 0 0 1.7 3h15.4a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0Z',
   info: 'M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18Zm0-9.5V16m0-8h.01',
   drag: 'M9 6h.01M9 12h.01M9 18h.01M15 6h.01M15 12h.01M15 18h.01',
+  translate: 'M3.5 5.5h9M8 3.5v2m2.6 0c-.9 3.8-3.2 6.7-6.6 8.4M6.4 8.3c1 2.1 2.7 3.8 4.9 4.9M12.5 20.5l4-9.5 4 9.5m-6.6-3h5.2',
+  camera: 'M4.5 8.5a2 2 0 0 1 2-2h2l1.5-2h4l1.5 2h2a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2h-11a2 2 0 0 1-2-2v-9Zm7.5 8.2a3.3 3.3 0 1 0 0-6.6 3.3 3.3 0 0 0 0 6.6Z',
+  mic: 'M12 14.5a3 3 0 0 0 3-3v-5a3 3 0 1 0-6 0v5a3 3 0 0 0 3 3Zm-6-3a6 6 0 0 0 12 0M12 17.5V21m-3 0h6',
+  volume: 'M4.5 9.5h3l4.5-4v13l-4.5-4h-3v-5Zm11 .3a3.4 3.4 0 0 1 0 4.4m2.6-7a7 7 0 0 1 0 9.6',
+  swap: 'M7 4.5 3.5 8 7 11.5M3.5 8h13M17 12.5l3.5 3.5-3.5 3.5M20.5 16h-13',
+  expand: 'M4.5 9V4.5H9M15 4.5h4.5V9M19.5 15v4.5H15M9 19.5H4.5V15',
+  image: 'M5.5 4.5h13a2 2 0 0 1 2 2v11a2 2 0 0 1-2 2h-13a2 2 0 0 1-2-2v-11a2 2 0 0 1 2-2Zm-2 12 5-5 4 4 2.5-2.5 5.5 5.5M15.5 9.5h.01',
 };
 
 const FILLED: Partial<Record<IconName, boolean>> = { play: true, flag: false };

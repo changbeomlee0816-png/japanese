@@ -45,6 +45,8 @@ export interface TransportLeg {
   manualDuration?: boolean;
   /** 편명·좌석 같은 메모 */
   note?: string;
+  /** 수단을 적지 않았다 — 위치를 찾은 뒤 거리로 수단을 고른다 */
+  autoMode?: boolean;
 }
 
 export interface Item {
@@ -165,4 +167,4 @@ export interface Settings {
   theme: 'system' | 'light' | 'dark';
 }
 
-export type TabKey = 'plan' | 'map' | 'food' | 'cost' | 'settings';
+export type TabKey = 'plan' | 'map' | 'food' | 'translate' | 'cost' | 'settings';

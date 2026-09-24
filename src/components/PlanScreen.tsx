@@ -20,6 +20,8 @@ import { DayInsights } from './DayInsights';
 import { TransportSheet } from './TransportSheet';
 import { SheetImportSheet } from './SheetImportSheet';
 import { AutoPlanSheet } from './AutoPlanSheet';
+import { ExpandSheet } from './ExpandSheet';
+import { findBroadBlocks } from '../lib/expandPlan';
 import { useWeather } from '../lib/weather';
 import { Icon } from './Icon';
 
@@ -48,6 +50,10 @@ export function PlanScreen({ trip, settings, dayIndex, onDayChange, bias, onShow
   const [transport, setTransport] = useState(false);
   const [sheetImport, setSheetImport] = useState(false);
   const [autoPlan, setAutoPlan] = useState(false);
+  /** 펼칠 범위 — 하루 또는 여행 전체 */
+  const [expandScope, setExpandScope] = useState<'day' | 'trip' | null>(null);
+  const broadInTrip = useMemo(() => findBroadBlocks(trip.days, trip.regionId), [trip.days, trip.regionId]);
+  const broadToday = day ? broadInTrip.filter((b) => b.dayId === day.id) : [];
   /** 전체 윤곽을 먼저 보고 하루를 파고드는 흐름 */
   const [view, setView] = useState<'overview' | 'day'>('overview');
   const [dayMenu, setDayMenu] = useState(false);
@@ -144,6 +150,14 @@ export function PlanScreen({ trip, settings, dayIndex, onDayChange, bias, onShow
             <div className="section">
               <div className="list">
                 <Row label="AI로 일정 짜기" icon="sparkles" accent onClick={() => setAutoPlan(true)} />
+                {broadInTrip.length > 0 && (
+                  <Row
+                    label={`포괄적인 일정 ${broadInTrip.length}개 → 구체적인 경로 추천`}
+                    icon="map"
+                    accent
+                    onClick={() => setExpandScope('trip')}
+                  />
+                )}
                 <Row label="메모한 일정 붙여넣기" icon="plan" accent onClick={() => setQuickAdd(true)} />
                 <Row label="엑셀로 한 번에 넣기" icon="list" accent onClick={() => setSheetImport(true)} />
                 <Row label="PDF로 내보내기" icon="printer" accent onClick={onPrint} />
@@ -288,6 +302,9 @@ export function PlanScreen({ trip, settings, dayIndex, onDayChange, bias, onShow
         <div className="section">
           <div className="list">
             {!readOnly && <Row label="이동 추가 (비행기 · 신칸센 등)" icon="plane" accent onClick={() => setTransport(true)} />}
+            {!readOnly && broadToday.length > 0 && (
+              <Row label={`「${broadToday[0].item.title}」 구체적인 경로 추천`} icon="map" accent onClick={() => setExpandScope('day')} />
+            )}
             {!readOnly && <Row label="AI로 일정 짜기" icon="sparkles" accent onClick={() => setAutoPlan(true)} />}
             {!readOnly && <Row label="이 지역 둘러보기" icon="star" accent onClick={() => setExplore(true)} />}
             {!readOnly && <Row label="메모한 일정 붙여넣기" icon="plan" accent onClick={() => setQuickAdd(true)} />}
@@ -317,6 +334,17 @@ export function PlanScreen({ trip, settings, dayIndex, onDayChange, bias, onShow
         />
       )}
 
+      {expandScope && (
+        <ExpandSheet
+          open
+          trip={trip}
+          days={expandScope === 'day' && day ? [day] : trip.days}
+          settings={settings}
+          bias={bias}
+          onClose={() => setExpandScope(null)}
+        />
+      )}
+
       <AutoPlanSheet
         open={autoPlan}
         trip={trip}
@@ -329,6 +357,7 @@ export function PlanScreen({ trip, settings, dayIndex, onDayChange, bias, onShow
       <SheetImportSheet
         open={sheetImport}
         trip={trip}
+        settings={settings}
         bias={bias}
         onClose={() => setSheetImport(false)}
         onImported={setPendingDate}
@@ -341,6 +370,7 @@ export function PlanScreen({ trip, settings, dayIndex, onDayChange, bias, onShow
       <QuickAddSheet
         open={quickAdd}
         trip={trip}
+        settings={settings}
         bias={bias}
         onClose={() => setQuickAdd(false)}
         onImported={setPendingDate}

@@ -27,6 +27,8 @@ export interface DraftItem {
   cost: number;
   notes?: string;
   address?: string;
+  /** 내장 사전에서 고른 곳은 좌표를 이미 안다 — 다시 찾지 않는다 */
+  coord?: { lat: number; lng: number };
   /** 다음 장소로 가는 이동을 못 박아 둘 때 */
   transportToNext?: { mode: TransportMode; note?: string };
 }
@@ -304,6 +306,15 @@ function candidatePool(brief: PlanBrief): PoiEntry[] {
   return out.filter((p) => p.category !== 'transport');
 }
 
+/** 장소가 이 관심사에 맞는가 — 태그가 없는 절·신사도 이름으로 알아본다 */
+function matchesInterest(poi: PoiEntry, interest: Interest): boolean {
+  const match = INTEREST_MATCH[interest];
+  if (poi.tags?.some((t) => match.tags.includes(t))) return true;
+  if (poi.category && match.categories.includes(poi.category)) return true;
+  if (interest === 'history') return /신사|신궁|데라|사원|[사지성]$|寺|神社|城/.test(poi.name);
+  return false;
+}
+
 function scorePoi(poi: PoiEntry, brief: PlanBrief): number {
   if (brief.avoid.includes(poi.name)) return -1000;
   if (brief.mustVisit.includes(poi.name)) return 1000;
@@ -313,6 +324,7 @@ function scorePoi(poi: PoiEntry, brief: PlanBrief): number {
   for (const interest of brief.interests) {
     const match = INTEREST_MATCH[interest];
     if (poi.tags?.some((t) => match.tags.includes(t))) score += 12;
+    else if (matchesInterest(poi, interest)) score += 10;
     if (poi.category && match.categories.includes(poi.category)) score += 8;
   }
   // 관심사를 하나도 안 적었으면 대표 명소 위주로
@@ -413,13 +425,29 @@ function nearestTo(list: PoiEntry[], from: { lat: number; lng: number }): number
 }
 
 /** 순서가 정해진 하루에 시각·식사·이동시간을 채워 넣는다 */
-function layOutDay(route: PoiEntry[], brief: PlanBrief, dayStart: string, usedMeals: Set<string>): DraftItem[] {
+interface LayoutOptions {
+  /** 이 시각이 넘으면 새 장소를 시작하지 않는다 */
+  endLimit?: number;
+  /** 넣어도 되는 식사 — 시간대를 펼칠 때는 이미 먹은 끼니를 또 넣으면 안 된다 */
+  lunch?: boolean;
+  dinner?: boolean;
+}
+
+function layOutDay(
+  route: PoiEntry[],
+  brief: PlanBrief,
+  dayStart: string,
+  usedMeals: Set<string>,
+  opts: LayoutOptions = {},
+): DraftItem[] {
   const items: DraftItem[] = [];
+  const endLimit = opts.endLimit ?? LAST_START;
   let clock = toMinutes(dayStart);
-  let lunchDone = false;
-  let dinnerDone = false;
+  let lunchDone = opts.lunch === false;
+  let dinnerDone = opts.dinner === false;
 
   const pushMeal = (kind: '점심' | '저녁', near: PoiEntry | undefined) => {
+    for (const p of route) usedMeals.add(p.name);
     const spot = nearestRestaurant(near?.coord, brief, usedMeals, clock);
     if (spot) usedMeals.add(spot.name);
     const durationMin = kind === '점심' ? 60 : 90;
@@ -431,6 +459,7 @@ function layOutDay(route: PoiEntry[], brief: PlanBrief, dayStart: string, usedMe
       cost: 0,
       notes: spot ? `${kind} · ${spot.genre}${spot.openHint ? ` · ${spot.openHint}` : ''}` : `${kind} 먹을 곳을 정해두세요`,
       address: spot?.address,
+      coord: spot?.coord,
     });
     clock += durationMin;
   };
@@ -439,15 +468,15 @@ function layOutDay(route: PoiEntry[], brief: PlanBrief, dayStart: string, usedMe
     const poi = route[i];
 
     // 시계가 식사 시간에 걸리면 먼저 밥을 먹는다
-    if (!lunchDone && clock >= 11 * 60 && clock <= 14 * 60) { pushMeal('점심', route[i - 1] ?? poi); lunchDone = true; clock += travelMin(route[i - 1], poi); }
+    if (!lunchDone && clock >= 11 * 60 + 30 && clock <= 14 * 60) { pushMeal('점심', route[i - 1] ?? poi); lunchDone = true; clock += travelMin(route[i - 1], poi); }
     if (!dinnerDone && clock >= 17 * 60 + 30 && clock <= 20 * 60) { pushMeal('저녁', route[i - 1] ?? poi); dinnerDone = true; clock += travelMin(route[i - 1], poi); }
 
     const durationMin = poi.stayMin ?? 90;
     const openLimited = poi.hours ? clampToHours(clock, durationMin, poi.hours) : clock;
     clock = openLimited;
 
-    // 밤 늦게 새 관광지를 시작하지 않는다. 남은 곳은 저장함으로 보낸다
-    if (clock > LAST_START && items.length > 0) break;
+    // 밤 늦게(또는 시간대 끝을 넘겨) 새 장소를 시작하지 않는다
+    if (items.length > 0 && (clock > endLimit || (opts.endLimit !== undefined && clock + Math.min(durationMin, 45) > endLimit))) break;
 
     items.push({
       title: poi.name,
@@ -457,6 +486,7 @@ function layOutDay(route: PoiEntry[], brief: PlanBrief, dayStart: string, usedMe
       cost: 0,
       notes: poi.blurb,
       address: poi.area,
+      coord: poi.coord,
     });
     clock += durationMin;
 
@@ -465,11 +495,95 @@ function layOutDay(route: PoiEntry[], brief: PlanBrief, dayStart: string, usedMe
   }
 
   // 하루가 저녁 전에 끝났으면 저녁을 붙여준다
-  if (!dinnerDone && route.length > 0 && clock <= 20 * 60) {
+  if (!dinnerDone && route.length > 0 && clock <= 20 * 60 && Math.max(clock, 18 * 60 + 30) + 60 <= endLimit + 90) {
     clock = Math.max(clock, 18 * 60 + 30);
     pushMeal('저녁', route[route.length - 1]);
   }
   return items;
+}
+
+/**
+ * 정해진 시간대를 구체적인 장소들로 채운다 — "14:00~18:00 교토 관광" 같은 포괄적인 일정을 펼칠 때.
+ *
+ * anchor 를 주면 거기서 시작해 가까운 곳으로 이어 간다("난바 쇼핑" → 도톤보리부터).
+ */
+export function fillWindow(opts: {
+  regionId: string;
+  interests: Interest[];
+  start: number;
+  end: number;
+  exclude: Set<string>;
+  usedMeals: Set<string>;
+  anchor?: PoiEntry;
+  /** 들르지는 않는 기준점 — 여기서 가까운 곳부터 */
+  origin?: { lat: number; lng: number };
+  lunch: boolean;
+  dinner: boolean;
+  seed?: number;
+}): DraftItem[] {
+  const region = regionById(opts.regionId);
+  const brief: PlanBrief = {
+    regionId: opts.regionId,
+    regionName: region?.name ?? '',
+    days: 1,
+    travelers: 2,
+    pace: 'normal',
+    interests: opts.interests,
+    mustVisit: opts.anchor ? [opts.anchor.name] : [],
+    avoid: [],
+    memo: '',
+  };
+  const origin = opts.anchor?.coord ?? opts.origin ?? region?.center;
+  let pool = spotsForRegion(opts.regionId)
+    .filter((p) => p.category !== 'transport' && !opts.exclude.has(p.name) && p.name !== opts.anchor?.name);
+
+  // "절 구경", "쇼핑" 처럼 할 일을 콕 집었으면 그런 곳만 — 두 곳 이상 있을 때
+  if (opts.interests.length > 0) {
+    const matching = pool.filter((p) => opts.interests.some((i) => matchesInterest(p, i)));
+    if (matching.length >= 2) pool = matching;
+  }
+
+  const ranked = pool
+    .map((poi) => ({
+      poi,
+      // 시간대 안에서 돌 곳이라 출발점에서 멀면 크게 깎는다
+      score: scorePoi(poi, brief) + jitter(poi.name, opts.seed ?? 0) - (origin ? (haversine(origin, poi.coord) / 1000) * 3 : 0),
+    }))
+    .sort((a, b) => b.score - a.score);
+
+  // 식사 몫을 빼고 남은 시간만큼 담는다
+  const reserve = (opts.lunch ? 60 : 0) + (opts.dinner ? 90 : 0);
+  const budget = opts.end - opts.start - reserve;
+  const group: PoiEntry[] = opts.anchor ? [opts.anchor] : [];
+  let used = opts.anchor ? (opts.anchor.stayMin ?? 60) : 0;
+
+  while (ranked.length > 0) {
+    const last = group[group.length - 1];
+    // 점수 높고, 방금 들른 곳에서 가까운 곳
+    let bestIdx = -1;
+    let bestValue = -Infinity;
+    for (let i = 0; i < ranked.length; i += 1) {
+      const km = last ? haversine(last.coord, ranked[i].poi.coord) / 1000 : 0;
+      const value = ranked[i].score - km * 2;
+      if (value > bestValue) { bestValue = value; bestIdx = i; }
+    }
+    const next = ranked[bestIdx].poi;
+    // 종일 코스는 시간대 안에 못 들어간다
+    const stay = (next.stayMin ?? 90) >= 240 ? Infinity : (next.stayMin ?? 90);
+    const cost = stay + (last ? travelMin(last, next) : 0);
+    ranked.splice(bestIdx, 1);
+    if (used + cost > budget) continue;
+    group.push(next);
+    used += cost;
+  }
+
+  if (group.length === 0) return [];
+  const ordered = opts.anchor ? [opts.anchor, ...orderRest(group.slice(1), opts.anchor.coord)] : orderByRoute(group, origin);
+  return layOutDay(ordered, brief, fromMinutes(opts.start), opts.usedMeals, {
+    endLimit: opts.end,
+    lunch: opts.lunch,
+    dinner: opts.dinner,
+  });
 }
 
 /** 두 장소 사이에 비워둘 시간 — 구간 경로는 나중에 useLegs 가 실측으로 덮어쓴다 */
@@ -500,8 +614,12 @@ function nearestRestaurant(
   const wantsLocal = brief.interests.includes('food');
   let best: (typeof LOCAL_RESTAURANTS)[number] | undefined;
   let bestValue = Infinity;
+  const usedKeys = [...used].map((n) => n.replace(/\s|\(.*?\)/g, ''));
   for (const r of LOCAL_RESTAURANTS) {
     if (used.has(r.name)) continue;
+    // "니시키 시장" 을 들렀는데 "니시키 시장 노점들" 에서 또 먹지 않게
+    const key = r.name.replace(/\s|\(.*?\)/g, '');
+    if (usedKeys.some((u) => u.length >= 3 && (key.includes(u) || u.includes(key)))) continue;
     // 저녁에만 여는 이자카야를 점심에 넣으면 안 된다
     if (!opensAt(r.openHint, atMinutes)) continue;
     const km = haversine(near, r.coord) / 1000;

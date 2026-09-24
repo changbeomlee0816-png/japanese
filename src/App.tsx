@@ -9,6 +9,7 @@ import { PlanScreen } from './components/PlanScreen';
 import { MapScreen } from './components/MapScreen';
 import { FoodScreen } from './components/FoodScreen';
 import { CostScreen } from './components/CostScreen';
+import { TranslateScreen } from './components/TranslateScreen';
 import { SettingsScreen } from './components/SettingsScreen';
 import { PrintPreview } from './components/PrintDocument';
 import { Icon, type IconName } from './components/Icon';
@@ -21,6 +22,7 @@ const TABS: Array<{ key: TabKey; label: string; icon: IconName }> = [
   { key: 'plan', label: '일정', icon: 'plan' },
   { key: 'map', label: '지도', icon: 'map' },
   { key: 'food', label: '맛집', icon: 'food' },
+  { key: 'translate', label: '번역', icon: 'translate' },
   { key: 'cost', label: '비용', icon: 'wallet' },
   { key: 'settings', label: '설정', icon: 'gear' },
 ];
@@ -29,6 +31,7 @@ const NAV_TITLE: Record<TabKey, string> = {
   plan: '일정',
   map: '지도',
   food: '맛집',
+  translate: '번역',
   cost: '비용',
   settings: '설정',
 };
@@ -189,6 +192,7 @@ export default function App() {
             onAnchorChange={setFoodAnchor}
           />
         )}
+        {tab === 'translate' && <TranslateScreen settings={settings} onOpenSettings={() => setTab('settings')} />}
         {tab === 'cost' && <CostScreen trip={trip} settings={settings} readOnly={readOnly} />}
         {tab === 'settings' && <SettingsScreen trip={trip} settings={settings} readOnly={readOnly} />}
       </main>
