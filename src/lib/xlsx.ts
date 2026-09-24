@@ -242,26 +242,123 @@ export function buildXlsx(rows: string[][], sheetName = 'Sheet1'): Blob {
  * 읽기
  * ------------------------------------------------------------------ */
 
-function parseSheetXml(sheetXml: string, sharedStrings: string[]): string[][] {
+/** 셀 서식이 날짜·시각인지 — 엑셀은 07:10 을 0.2986… 으로, 9/20 을 46285 로 저장한다 */
+type CellKind = 'date' | 'time' | 'datetime' | null;
+
+const BUILTIN_FORMATS: Record<number, CellKind> = {
+  14: 'date', 15: 'date', 16: 'date', 17: 'date', 22: 'datetime',
+  18: 'time', 19: 'time', 20: 'time', 21: 'time', 45: 'time', 46: 'time', 47: 'time',
+  // 동아시아 로캘 기본 서식 (한국어·일본어 엑셀)
+  27: 'date', 28: 'date', 29: 'date', 30: 'date', 31: 'date', 32: 'time', 33: 'time',
+  34: 'time', 35: 'time', 36: 'date', 50: 'date', 51: 'date', 52: 'date', 53: 'date',
+  54: 'date', 55: 'time', 56: 'time', 57: 'date', 58: 'date',
+};
+
+function classifyFormat(code: string): CellKind {
+  const lower = code.toLowerCase();
+  // [h]:mm 같은 경과 시간은 대괄호째 지워지기 전에 본다
+  const elapsed = /\[(h+|m+|s+)\]/.test(lower);
+  // 따옴표 안 글자("년"), 대괄호([$-ko-KR], [Red]), 이스케이프(\-)는 서식 기호가 아니다
+  const bare = lower.replace(/"[^"]*"|\[[^\]]*\]|\\./g, '');
+  const ampm = /am\/pm|a\/p/.test(bare);
+  const tokens = bare.replace(/am\/pm|a\/p/g, '');
+
+  let date = /[yd]/.test(tokens);
+  let time = elapsed || ampm || /[hs]/.test(tokens);
+  // m 은 h 뒤나 s 앞에 오면 '분', 아니면 '월'이다
+  // (":mm" 처럼 콜론 뒤에 오는 m 도 분 — [h]:mm)
+  const monthsOnly = tokens.replace(/h+[^a-z0-9]*m+/g, 'h').replace(/:m+/g, ':').replace(/m+(?=[^a-z0-9]*s)/g, '');
+  if (/m/.test(monthsOnly)) date = true;
+  if (!/[ymdhs]/.test(tokens) && !elapsed && !ampm) { date = false; time = false; }
+
+  if (date && time) return 'datetime';
+  if (date) return 'date';
+  if (time) return 'time';
+  return null;
+}
+
+/** styles.xml 을 읽어 셀 서식 번호(s="3") → 날짜/시각 여부 표를 만든다 */
+function readStyleKinds(stylesXml: string | undefined): CellKind[] {
+  if (!stylesXml) return [];
+  const doc = new DOMParser().parseFromString(stylesXml, 'application/xml');
+  const custom = new Map<number, CellKind>();
+  for (const el of Array.from(doc.getElementsByTagName('numFmt'))) {
+    custom.set(Number(el.getAttribute('numFmtId')), classifyFormat(el.getAttribute('formatCode') ?? ''));
+  }
+  const cellXfs = doc.getElementsByTagName('cellXfs')[0];
+  if (!cellXfs) return [];
+  return Array.from(cellXfs.getElementsByTagName('xf')).map((xf) => {
+    const id = Number(xf.getAttribute('numFmtId') ?? 0);
+    return custom.get(id) ?? BUILTIN_FORMATS[id] ?? null;
+  });
+}
+
+const pad2 = (n: number) => String(n).padStart(2, '0');
+
+/** 엑셀 일련번호를 화면에 보이던 모양으로 되돌린다 */
+function formatSerial(serial: number, kind: Exclude<CellKind, null>, date1904: boolean): string {
+  const whole = Math.floor(serial);
+  // 초 단위 반올림 — 0.29861111 이 07:09:59 가 되지 않게
+  const seconds = Math.round((serial - whole) * 86400);
+  const hh = Math.floor(seconds / 3600) % 24;
+  const mm = Math.floor((seconds % 3600) / 60);
+  const time = `${pad2(hh)}:${pad2(mm)}`;
+  if (kind === 'time') return time;
+
+  // 1900 체계의 기준일은 1899-12-30 (엑셀의 1900-02-29 버그를 반영한 값)
+  const epoch = date1904 ? Date.UTC(1904, 0, 1) : Date.UTC(1899, 11, 30);
+  const d = new Date(epoch + whole * 86400000);
+  const date = `${d.getUTCFullYear()}-${pad2(d.getUTCMonth() + 1)}-${pad2(d.getUTCDate())}`;
+  if (kind === 'date' || (kind === 'datetime' && seconds === 0)) return date;
+  return `${date} ${time}`;
+}
+
+/** 공유 문자열 한 칸의 글자. 일본어 엑셀의 후리가나(<rPh>)는 빼야 한다 */
+function stringItemText(si: Element): string {
+  let out = '';
+  for (const t of Array.from(si.getElementsByTagName('t'))) {
+    let parent = t.parentElement;
+    let phonetic = false;
+    while (parent && parent !== si) {
+      if (parent.localName === 'rPh') { phonetic = true; break; }
+      parent = parent.parentElement;
+    }
+    if (!phonetic) out += t.textContent ?? '';
+  }
+  return out;
+}
+
+function parseSheetXml(sheetXml: string, sharedStrings: string[], kinds: CellKind[], date1904: boolean): string[][] {
   const doc = new DOMParser().parseFromString(sheetXml, 'application/xml');
   const rows: string[][] = [];
 
   for (const rowEl of Array.from(doc.getElementsByTagName('row'))) {
+    // 빈 행은 파일에 적히지 않는다. 행 번호를 지켜야 "5행" 같은 안내가 맞다
+    const rowNumber = Number(rowEl.getAttribute('r'));
+    if (rowNumber > 0) while (rows.length < rowNumber - 1) rows.push([]);
+
     const cells: string[] = [];
     for (const cellEl of Array.from(rowEl.getElementsByTagName('c'))) {
       const ref = cellEl.getAttribute('r') ?? '';
       const letters = ref.replace(/\d/g, '');
       let index = 0;
       for (const ch of letters) index = index * 26 + (ch.charCodeAt(0) - 64);
-      index -= 1;
+      index = letters ? index - 1 : cells.length;
 
       const type = cellEl.getAttribute('t');
       let text = '';
       if (type === 'inlineStr') {
-        text = Array.from(cellEl.getElementsByTagName('t')).map((t) => t.textContent ?? '').join('');
+        const is = cellEl.getElementsByTagName('is')[0];
+        text = is ? stringItemText(is) : '';
       } else {
         const v = cellEl.getElementsByTagName('v')[0]?.textContent ?? '';
-        text = type === 's' ? (sharedStrings[Number(v)] ?? '') : v;
+        if (type === 's') text = sharedStrings[Number(v)] ?? '';
+        else if (type === 'str' || type === 'b' || type === 'e') text = v;
+        else {
+          const kind = kinds[Number(cellEl.getAttribute('s') ?? -1)] ?? null;
+          const num = Number(v);
+          text = kind && v !== '' && Number.isFinite(num) ? formatSerial(num, kind, date1904) : v;
+        }
       }
 
       while (cells.length < index) cells.push('');
@@ -307,26 +404,61 @@ function parseCsv(text: string): string[][] {
   return rows;
 }
 
-/** 엑셀(.xlsx) 또는 CSV 파일에서 표를 읽는다 */
-export async function readSpreadsheet(file: File): Promise<string[][]> {
+export interface SheetData {
+  name: string;
+  rows: string[][];
+}
+
+/** 엑셀(.xlsx)의 모든 시트, 또는 CSV 한 장을 읽는다 */
+export async function readWorkbook(file: File): Promise<SheetData[]> {
   if (/\.csv$|\.tsv$|\.txt$/i.test(file.name)) {
-    return parseCsv(await file.text());
+    return [{ name: file.name, rows: parseCsv(await file.text()) }];
   }
 
   const buffer = await file.arrayBuffer();
   const files = await readZip(buffer);
 
-  const sheetName = [...files.keys()].find((n) => /^xl\/worksheets\/sheet\d+\.xml$/.test(n));
-  if (!sheetName) throw new Error('엑셀 시트를 찾지 못했습니다');
-
   const sharedXml = files.get('xl/sharedStrings.xml');
   const sharedStrings: string[] = [];
   if (sharedXml) {
     const doc = new DOMParser().parseFromString(sharedXml, 'application/xml');
-    for (const si of Array.from(doc.getElementsByTagName('si'))) {
-      sharedStrings.push(Array.from(si.getElementsByTagName('t')).map((t) => t.textContent ?? '').join(''));
-    }
+    for (const si of Array.from(doc.getElementsByTagName('si'))) sharedStrings.push(stringItemText(si));
+  }
+  const kinds = readStyleKinds(files.get('xl/styles.xml'));
+
+  // 시트 이름과 순서는 workbook.xml 이 정한다. zip 안의 순서는 믿을 수 없다(sheet10 이 sheet2 보다 먼저 올 수 있다)
+  const workbookXml = files.get('xl/workbook.xml') ?? '';
+  const relsXml = files.get('xl/_rels/workbook.xml.rels') ?? '';
+  const wb = new DOMParser().parseFromString(workbookXml || '<workbook/>', 'application/xml');
+  const rels = new DOMParser().parseFromString(relsXml || '<Relationships/>', 'application/xml');
+  const date1904 = /^(1|true)$/i.test(wb.getElementsByTagName('workbookPr')[0]?.getAttribute('date1904') ?? '');
+
+  const targets = new Map<string, string>();
+  for (const rel of Array.from(rels.getElementsByTagName('Relationship'))) {
+    const target = (rel.getAttribute('Target') ?? '').replace(/^\/?(xl\/)?/, '');
+    targets.set(rel.getAttribute('Id') ?? '', `xl/${target}`);
   }
 
-  return parseSheetXml(files.get(sheetName)!, sharedStrings);
+  const sheets: SheetData[] = [];
+  for (const el of Array.from(wb.getElementsByTagName('sheet'))) {
+    const rid = el.getAttribute('r:id') ?? el.getAttributeNS('http://schemas.openxmlformats.org/officeDocument/2006/relationships', 'id') ?? '';
+    const path = targets.get(rid);
+    const xml = path ? files.get(path) : undefined;
+    if (xml) sheets.push({ name: el.getAttribute('name') ?? `시트${sheets.length + 1}`, rows: parseSheetXml(xml, sharedStrings, kinds, date1904) });
+  }
+
+  // workbook.xml 이 없거나 깨진 파일 — 이름 순으로라도 읽는다
+  if (sheets.length === 0) {
+    const names = [...files.keys()]
+      .filter((n) => /^xl\/worksheets\/sheet\d+\.xml$/.test(n))
+      .sort((a, b) => Number(a.match(/(\d+)\.xml$/)![1]) - Number(b.match(/(\d+)\.xml$/)![1]));
+    for (const n of names) sheets.push({ name: n.replace(/^.*\/|\.xml$/g, ''), rows: parseSheetXml(files.get(n)!, sharedStrings, kinds, date1904) });
+  }
+  if (sheets.length === 0) throw new Error('엑셀 시트를 찾지 못했습니다');
+  return sheets;
+}
+
+/** 첫 시트만 필요할 때 */
+export async function readSpreadsheet(file: File): Promise<string[][]> {
+  return (await readWorkbook(file))[0].rows;
 }

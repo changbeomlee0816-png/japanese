@@ -4,38 +4,20 @@ import { LOCAL_RESTAURANTS } from '../data/restaurants';
 import { haversine } from './geo';
 import { INTEREST_LABEL, PACE_LABEL, briefCandidates, type PlanBrief, type PlanDraft, type DraftDay, type DraftItem } from './autoPlan';
 import { addDaysISO } from './time';
+import { ClaudeError, callClaudeTool, type ClaudeOptions, type ToolSpec } from './claude';
 
 /**
- * Claude에게 일정을 맡기는 엔진.
- *
- * 왜 공식 SDK가 아니라 fetch 인가:
- *   @anthropic-ai/sdk 를 브라우저 번들에 넣으면 트리셰이킹 후에도 183KB 가 늘어난다
- *   (측정값 — 지금 번들 전체가 337KB 다). 오프라인으로도 열려야 하는 PWA 에서
- *   두 배 가까운 증가는 받아들이기 어려워서, supabase.ts·xlsx.ts 와 같은 방식으로
- *   Messages API 를 직접 호출한다. 요청 형태는 공식 문서의 raw HTTP 예제를 그대로 따른다.
- *
- * 키는 이 브라우저의 localStorage 에만 있고 api.anthropic.com 외에는 아무 데도 가지 않는다.
- * 공유 링크에 실리는 것은 일정뿐이라 키가 남에게 새지 않는다.
+ * Claude에게 일정을 맡기는 엔진. 호출 자체는 claude.ts 가 맡는다.
  */
 
-const ENDPOINT = 'https://api.anthropic.com/v1/messages';
-const API_VERSION = '2023-06-01';
+export { AI_MODELS, DEFAULT_AI_MODEL } from './claude';
 
-export const AI_MODELS = [
-  { id: 'claude-opus-5', label: 'Opus 5', hint: '가장 똑똑함 · 비용 높음' },
-  { id: 'claude-sonnet-5', label: 'Sonnet 5', hint: '균형' },
-  { id: 'claude-haiku-4-5', label: 'Haiku 4.5', hint: '가장 저렴 · 빠름' },
-] as const;
-
-export const DEFAULT_AI_MODEL = AI_MODELS[0].id;
-
-const CATEGORIES: Category[] = ['sight', 'food', 'cafe', 'shopping', 'stay', 'transport', 'activity', 'etc'];
+export const CATEGORIES: Category[] = ['sight', 'food', 'cafe', 'shopping', 'stay', 'transport', 'activity', 'etc'];
 
 /** 응답 형태를 못 박는다. strict 라서 모든 칸이 필수 — 없는 값은 빈 문자열/0 으로 받는다 */
 const PLAN_TOOL = {
   name: 'submit_plan',
   description: '완성한 여행 일정을 제출한다. 반드시 이 도구로만 답한다.',
-  strict: true,
   input_schema: {
     type: 'object',
     properties: {
@@ -79,68 +61,17 @@ const PLAN_TOOL = {
   },
 } as const;
 
-export class AiPlanError extends Error {
-  constructor(message: string, readonly kind: 'auth' | 'rate' | 'network' | 'shape' | 'other') {
-    super(message);
-  }
-}
+/** 예전 이름 — 호출하는 쪽이 instanceof 로 쓴다 */
+export { ClaudeError as AiPlanError } from './claude';
 
-interface AiOptions {
-  apiKey: string;
-  model: string;
-  signal?: AbortSignal;
-}
-
-/** Claude 에게 일정을 짜게 한다. 실패하면 AiPlanError 를 던지고, 호출한 쪽이 규칙 엔진으로 돌아간다 */
-export async function buildAiPlan(brief: PlanBrief, startDate: string, opts: AiOptions): Promise<PlanDraft> {
-  const body = {
-    model: opts.model,
-    max_tokens: 16000,
+/** Claude 에게 일정을 짜게 한다. 실패하면 ClaudeError 를 던지고, 호출한 쪽이 규칙 엔진으로 돌아간다 */
+export async function buildAiPlan(brief: PlanBrief, startDate: string, opts: ClaudeOptions): Promise<PlanDraft> {
+  const payload = await callClaudeTool<AiPayload>(opts, {
     system: SYSTEM_PROMPT,
-    messages: [{ role: 'user', content: buildUserPrompt(brief, startDate) }],
-    tools: [PLAN_TOOL],
-    // 도구를 강제하는 대신 auto + 지시문을 쓴다. 확장 사고와 충돌하지 않는다
-    tool_choice: { type: 'auto' },
-  };
-
-  let res: Response;
-  try {
-    res = await fetch(ENDPOINT, {
-      method: 'POST',
-      headers: {
-        'content-type': 'application/json',
-        'x-api-key': opts.apiKey,
-        'anthropic-version': API_VERSION,
-        // 브라우저에서 직접 부를 때 필요한 헤더
-        'anthropic-dangerous-direct-browser-access': 'true',
-      },
-      body: JSON.stringify(body),
-      signal: opts.signal,
-    });
-  } catch (e) {
-    if ((e as Error)?.name === 'AbortError') throw e;
-    throw new AiPlanError('네트워크에 연결하지 못했습니다.', 'network');
-  }
-
-  if (!res.ok) {
-    const detail = await res.text().catch(() => '');
-    if (res.status === 401 || res.status === 403) throw new AiPlanError('API 키가 올바르지 않습니다.', 'auth');
-    if (res.status === 429) throw new AiPlanError('요청이 너무 잦습니다. 잠시 뒤 다시 시도하세요.', 'rate');
-    throw new AiPlanError(`Claude가 응답하지 않았습니다 (${res.status}). ${shorten(detail)}`, 'other');
-  }
-
-  const json = (await res.json()) as {
-    content?: Array<{ type: string; name?: string; input?: unknown; text?: string }>;
-    stop_reason?: string;
-  };
-
-  if (json.stop_reason === 'refusal') throw new AiPlanError('Claude가 이 요청에 답하지 않았습니다.', 'other');
-
-  const call = json.content?.find((b) => b.type === 'tool_use' && b.name === PLAN_TOOL.name);
-  const payload = call?.input ?? extractJson(json.content);
-  if (!payload) throw new AiPlanError('Claude의 답을 일정으로 읽지 못했습니다.', 'shape');
-
-  return toDraft(payload as AiPayload, brief, startDate);
+    content: buildUserPrompt(brief, startDate),
+    tool: PLAN_TOOL as unknown as ToolSpec,
+  });
+  return toDraft(payload, brief, startDate);
 }
 
 /* ─────────────────────────── 프롬프트 ─────────────────────────── */
@@ -262,7 +193,7 @@ function toDraft(payload: AiPayload, brief: PlanBrief, startDate: string): PlanD
     days.push({ date: addDaysISO(startDate, index), title: day.title?.trim() || undefined, items });
   }
 
-  if (days.length === 0) throw new AiPlanError('Claude가 빈 일정을 돌려줬습니다.', 'shape');
+  if (days.length === 0) throw new ClaudeError('Claude가 빈 일정을 돌려줬습니다.', 'shape');
 
   days.sort((a, b) => a.date.localeCompare(b.date));
 
@@ -274,7 +205,7 @@ function toDraft(payload: AiPayload, brief: PlanBrief, startDate: string): PlanD
   };
 }
 
-function normalizeTime(value: string | undefined): string | null {
+export function normalizeTime(value: string | undefined): string | null {
   const m = value?.match(/(\d{1,2})\s*:\s*(\d{1,2})/);
   if (!m) return null;
   const h = Number(m[1]);
@@ -283,27 +214,8 @@ function normalizeTime(value: string | undefined): string | null {
   return `${String(h).padStart(2, '0')}:${String(min).padStart(2, '0')}`;
 }
 
-function clampInt(value: unknown, min: number, max: number, fallback: number): number {
+export function clampInt(value: unknown, min: number, max: number, fallback: number): number {
   const n = Math.round(Number(value));
   if (!Number.isFinite(n)) return fallback;
   return Math.min(max, Math.max(min, n));
-}
-
-/** 도구를 안 쓰고 본문에 JSON 을 적어 온 경우의 보험 */
-function extractJson(content: Array<{ type: string; text?: string }> | undefined): unknown {
-  const text = content?.filter((b) => b.type === 'text').map((b) => b.text ?? '').join('\n');
-  if (!text) return null;
-  const start = text.indexOf('{');
-  const end = text.lastIndexOf('}');
-  if (start < 0 || end <= start) return null;
-  try {
-    return JSON.parse(text.slice(start, end + 1));
-  } catch {
-    return null;
-  }
-}
-
-function shorten(text: string): string {
-  const trimmed = text.replace(/\s+/g, ' ').trim();
-  return trimmed.length > 160 ? `${trimmed.slice(0, 160)}…` : trimmed;
 }

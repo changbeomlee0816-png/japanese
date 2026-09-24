@@ -1,12 +1,11 @@
 import { useMemo, useState } from 'react';
-import type { LatLng, Trip } from '../types';
+import type { LatLng, Settings, Trip } from '../types';
 import { actions } from '../store/tripStore';
 import { parsePlanText } from '../lib/parsePlan';
 import { resolveMissingPlaces, type ResolveProgress } from '../lib/resolve';
-import { addMinutes, formatDateShort, formatDuration } from '../lib/time';
-import { transportLabel } from '../lib/transport';
-import { CATEGORY } from '../lib/category';
 import { Sheet, Segmented } from './ui';
+import { PreviewDays } from './PreviewDays';
+import { RouteExpansionPanel, useRouteExpansion } from './RouteExpansion';
 import { Icon } from './Icon';
 
 const EXAMPLE = `9/12
@@ -24,6 +23,7 @@ const EXAMPLE = `9/12
 interface Props {
   open: boolean;
   trip: Trip;
+  settings: Settings;
   bias?: LatLng;
   onClose: () => void;
   /** 가져온 첫 날짜로 화면을 옮기기 위해 알려준다 */
@@ -31,7 +31,7 @@ interface Props {
 }
 
 /** 요구사항 1 — "대충 짜서 넣으면" 구조화해 주는 입력 시트 */
-export function QuickAddSheet({ open, trip, bias, onClose, onImported }: Props) {
+export function QuickAddSheet({ open, trip, settings, bias, onClose, onImported }: Props) {
   const [text, setText] = useState('');
   const [mode, setMode] = useState<'append' | 'replace'>('append');
   const [progress, setProgress] = useState<ResolveProgress | null>(null);
@@ -41,11 +41,14 @@ export function QuickAddSheet({ open, trip, bias, onClose, onImported }: Props) 
     if (!text.trim()) return null;
     return parsePlanText(text, trip.days[0]?.date);
   }, [text, trip.days]);
+  const expansion = useRouteExpansion(preview?.days ?? null, trip.regionId, settings);
 
   const run = async () => {
     if (!preview || preview.itemCount === 0) return;
     setBusy(true);
-    const imported = actions.importPlanText(text, mode);
+    // 포괄적인 일정을 펼친 결과까지 그대로 넣는다
+    const imported = { days: expansion.days };
+    actions.importDays(expansion.days, mode);
 
     // 방금 넣은 항목들의 좌표를 찾아 지도/경로/비용을 채운다
     const latest = actions.exportState();
@@ -69,7 +72,7 @@ export function QuickAddSheet({ open, trip, bias, onClose, onImported }: Props) 
       onClose={busy ? () => {} : onClose}
       confirmLabel={busy ? '처리 중…' : '가져오기'}
       onConfirm={run}
-      confirmDisabled={busy || !preview || preview.itemCount === 0}
+      confirmDisabled={busy || expansion.busy || !preview || preview.itemCount === 0}
     >
       <div className="section">
         <div className="paste-help">
@@ -125,44 +128,15 @@ export function QuickAddSheet({ open, trip, bias, onClose, onImported }: Props) 
         />
       </div>
 
+      {preview && <RouteExpansionPanel state={expansion} />}
+
       {preview && (
         <div className="section">
           <div className="section__header">
             <span className="section__title">미리보기</span>
-            <span className="muted small">{preview.days.length}일 · {preview.itemCount}개 일정</span>
+            <span className="muted small">{expansion.days.length}일 · {expansion.days.reduce((n, d) => n + d.items.length, 0)}개 일정</span>
           </div>
-          <div className="list">
-            {preview.days.map((d) => (
-              <div key={d.id} className="preview-day">
-                <div className="preview-day__head">{formatDateShort(d.date)}</div>
-                {d.items.map((it) => (
-                  <div key={it.id}>
-                    <div className="preview-item">
-                      <span className="mono muted small">
-                        {it.startTime}
-                        {it.durationMin > 0 && `–${addMinutes(it.startTime, it.durationMin)}`}
-                      </span>
-                      <span className="preview-item__title">{it.title}</span>
-                      <span className="badge" style={{ color: CATEGORY[it.category].color }}>
-                        {CATEGORY[it.category].label}
-                      </span>
-                    </div>
-                    {it.transportToNext && (
-                      <div className="preview-item preview-item--link">
-                        <span className="mono muted small" />
-                        <span className="preview-item__title muted small">
-                          ↓ {transportLabel(it.transportToNext.mode)}{' '}
-                          {it.transportToNext.durationMin > 0
-                            ? formatDuration(it.transportToNext.durationMin)
-                            : '소요시간 자동 계산'}
-                        </span>
-                      </div>
-                    )}
-                  </div>
-                ))}
-              </div>
-            ))}
-          </div>
+          <PreviewDays days={expansion.days} highlight={expansion.added} />
           {preview.warnings.length > 0 && (
             <p className="muted tiny" style={{ padding: '10px 4px 0' }}>
               {preview.warnings.slice(0, 3).join(' / ')}

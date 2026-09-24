@@ -12,6 +12,7 @@
 const VERSION = 'tabi-v1';
 const SHELL_CACHE = `${VERSION}-shell`;
 const DATA_CACHE = `${VERSION}-data`;
+const OCR_CACHE = `${VERSION}-ocr`;
 
 self.addEventListener('install', (event) => {
   event.waitUntil(
@@ -31,6 +32,11 @@ self.addEventListener('activate', (event) => {
 
 function isShellAsset(url) {
   return url.origin === self.location.origin && (url.pathname.includes('/assets/') || url.pathname.endsWith('.svg') || url.pathname.endsWith('.webmanifest'));
+}
+
+/** 사진 번역용 글자 인식 엔진과 일본어 자료 — 한 번 받으면 오프라인에서도 쓴다 */
+function isOcrAsset(url) {
+  return (url.hostname === 'cdn.jsdelivr.net' && url.pathname.startsWith('/npm/tesseract')) || url.hostname === 'tessdata.projectnaptha.com';
 }
 
 function isData(url) {
@@ -70,6 +76,22 @@ self.addEventListener('fetch', (event) => {
             caches.open(SHELL_CACHE).then((c) => c.put(req, copy));
             return res;
           }),
+      ),
+    );
+    return;
+  }
+
+  if (isOcrAsset(url)) {
+    event.respondWith(
+      caches.open(OCR_CACHE).then((cache) =>
+        cache.match(req).then(
+          (hit) =>
+            hit ??
+            fetch(req).then((res) => {
+              if (res.ok) cache.put(req, res.clone());
+              return res;
+            }),
+        ),
       ),
     );
     return;

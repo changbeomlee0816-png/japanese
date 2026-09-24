@@ -1,19 +1,20 @@
-import { useRef, useState } from 'react';
-import type { LatLng, Trip } from '../types';
+import { useMemo, useRef, useState } from 'react';
+import type { LatLng, Settings, Trip } from '../types';
 import { actions } from '../store/tripStore';
-import { buildXlsx, readSpreadsheet } from '../lib/xlsx';
+import { buildXlsx, readWorkbook, type SheetData } from '../lib/xlsx';
+import { sheetScore } from '../lib/sheetDetect';
 import { SHEET_HEADERS, SHEET_SAMPLE_ROWS, importSheetRows } from '../lib/importSheet';
 import { resolveMissingPlaces, type ResolveProgress } from '../lib/resolve';
 import { saveFile } from '../lib/share';
-import { addMinutes, formatDateShort, formatDuration } from '../lib/time';
-import { transportLabel } from '../lib/transport';
-import { CATEGORY } from '../lib/category';
 import { Sheet, Segmented } from './ui';
+import { PreviewDays } from './PreviewDays';
+import { RouteExpansionPanel, useRouteExpansion } from './RouteExpansion';
 import { Icon } from './Icon';
 
 interface Props {
   open: boolean;
   trip: Trip;
+  settings: Settings;
   bias?: LatLng;
   onClose: () => void;
   onImported?: (firstDate: string) => void;
@@ -22,11 +23,12 @@ interface Props {
 /**
  * 엑셀로 일정 넣기.
  *
- * 여러 날짜를 한 번에 옮겨 적을 때는 표가 편하다.
- * 양식을 내려받아 채운 뒤 그대로 올리면 된다. 엑셀에서 CSV로 저장해도 읽는다.
+ * 양식을 내려받아 채워도 되고, 이미 만들어 둔 표를 그대로 올려도 된다.
+ * 칸 이름이 달라도, 머리글이 없어도, 시간만 적혀 있으면 어느 칸이 무엇인지 알아낸다.
  */
-export function SheetImportSheet({ open, trip, bias, onClose, onImported }: Props) {
-  const [rows, setRows] = useState<string[][] | null>(null);
+export function SheetImportSheet({ open, trip, settings, bias, onClose, onImported }: Props) {
+  const [sheets, setSheets] = useState<SheetData[] | null>(null);
+  const [sheetIndex, setSheetIndex] = useState(0);
   const [fileName, setFileName] = useState('');
   const [mode, setMode] = useState<'append' | 'replace'>('append');
   const [error, setError] = useState<string | null>(null);
@@ -34,10 +36,14 @@ export function SheetImportSheet({ open, trip, bias, onClose, onImported }: Prop
   const [progress, setProgress] = useState<ResolveProgress | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
 
-  const preview = rows ? importSheetRows(rows, trip.days[0]?.date) : null;
+  const rows = sheets?.[sheetIndex]?.rows ?? null;
+  const preview = useMemo(() => (rows ? importSheetRows(rows, trip.days[0]?.date) : null), [rows, trip.days]);
+  const expansion = useRouteExpansion(preview?.days ?? null, trip.regionId, settings);
+  const totalItems = expansion.days.reduce((n, d) => n + d.items.length, 0);
 
   const reset = () => {
-    setRows(null);
+    setSheets(null);
+    setSheetIndex(0);
     setFileName('');
     setError(null);
     setProgress(null);
@@ -53,12 +59,16 @@ export function SheetImportSheet({ open, trip, bias, onClose, onImported }: Prop
   const pickFile = async (file: File) => {
     setError(null);
     try {
-      const parsed = await readSpreadsheet(file);
-      if (parsed.length === 0) {
+      const book = await readWorkbook(file);
+      if (book.every((sh) => sh.rows.length === 0)) {
         setError('빈 파일입니다.');
         return;
       }
-      setRows(parsed);
+      // 시트가 여럿이면 시간이 가장 많이 적힌 시트가 일정표다
+      let best = 0;
+      book.forEach((sh, i) => { if (sheetScore(sh.rows) > sheetScore(book[best].rows)) best = i; });
+      setSheets(book);
+      setSheetIndex(best);
       setFileName(file.name);
     } catch (e) {
       console.warn('[sheet] 읽기 실패', e);
@@ -67,9 +77,11 @@ export function SheetImportSheet({ open, trip, bias, onClose, onImported }: Prop
   };
 
   const run = async () => {
-    if (!rows || !preview || preview.itemCount === 0) return;
+    if (!rows || !preview || totalItems === 0) return;
     setBusy(true);
-    const result = actions.importSheet(rows, mode);
+    // 포괄적인 일정을 펼친 결과까지 그대로 넣는다
+    const result = { days: expansion.days };
+    actions.importDays(expansion.days, mode);
 
     // 주소·장소명으로 좌표를 찾아야 경로와 비용이 계산된다
     const latest = JSON.parse(actions.exportState()) as { trips: Trip[] };
@@ -90,10 +102,18 @@ export function SheetImportSheet({ open, trip, bias, onClose, onImported }: Prop
       onClose={busy ? () => {} : () => { reset(); onClose(); }}
       confirmLabel={busy ? '처리 중…' : '가져오기'}
       onConfirm={run}
-      confirmDisabled={busy || !preview || preview.itemCount === 0}
+      confirmDisabled={busy || expansion.busy || !preview || totalItems === 0}
     >
       <div className="section">
-        <div className="section__header"><span className="section__title">1. 양식 받기</span></div>
+        <div className="notice notice--info" style={{ marginBottom: 12 }}>
+          <Icon name="info" size={17} strokeWidth={2} color="var(--blue)" />
+          <span className="small">
+            <b>이미 만들어 둔 표를 그대로 올려도 됩니다.</b> 칸 이름·순서가 달라도, 머리글이 없어도
+            시간만 적혀 있으면 어느 칸이 무엇인지 알아서 읽습니다. 날짜가 없으면 시간이 되돌아가는 곳에서 다음 날로 넘깁니다.
+            <code>1일차 | 2일차 | 3일차</code> 처럼 날짜를 가로로 늘어놓은 시간표도 됩니다.
+          </span>
+        </div>
+        <div className="section__header"><span className="section__title">1. 양식 받기 (선택)</span></div>
         <button type="button" className="btn btn--tinted btn--block" onClick={() => void downloadTemplate()}>
           <Icon name="share" size={16} strokeWidth={2} /> 엑셀 양식 내려받기
         </button>
@@ -121,7 +141,7 @@ export function SheetImportSheet({ open, trip, bias, onClose, onImported }: Prop
       </div>
 
       <div className="section">
-        <div className="section__header"><span className="section__title">2. 채운 파일 올리기</span></div>
+        <div className="section__header"><span className="section__title">2. 파일 올리기</span></div>
         <button
           type="button"
           className={`btn btn--block ${rows ? 'btn--gray' : 'btn--primary'}`}
@@ -129,7 +149,7 @@ export function SheetImportSheet({ open, trip, bias, onClose, onImported }: Prop
           disabled={busy}
         >
           <Icon name="copy" size={16} strokeWidth={2} />
-          {fileName ? `${fileName} — 다시 고르기` : '엑셀 파일 선택 (.xlsx · .csv)'}
+          {fileName ? `${fileName} — 다시 고르기` : '엑셀 파일 선택 (.xlsx · .csv · .tsv)'}
         </button>
         <input
           ref={fileRef}
@@ -143,7 +163,23 @@ export function SheetImportSheet({ open, trip, bias, onClose, onImported }: Prop
           }}
         />
         {error && <p className="small" style={{ color: 'var(--red)', padding: '10px 4px 0' }}>{error}</p>}
+        {sheets && sheets.length > 1 && (
+          <div style={{ marginTop: 12 }}>
+            <Segmented
+              value={String(sheetIndex)}
+              onChange={(v) => setSheetIndex(Number(v))}
+              options={sheets.map((sh, i) => ({ value: String(i), label: sh.name }))}
+            />
+          </div>
+        )}
+        {preview && (
+          <p className="muted tiny sheet-layout" style={{ padding: '10px 4px 0', lineHeight: 1.6 }}>
+            이렇게 읽었습니다 — {preview.layout || '읽을 칸을 찾지 못했습니다'}
+          </p>
+        )}
       </div>
+
+      {preview && <RouteExpansionPanel state={expansion} />}
 
       {preview && (
         <>
@@ -162,40 +198,9 @@ export function SheetImportSheet({ open, trip, bias, onClose, onImported }: Prop
           <div className="section">
             <div className="section__header">
               <span className="section__title">미리보기</span>
-              <span className="muted small">{preview.days.length}일 · {preview.itemCount}개 일정</span>
+              <span className="muted small">{expansion.days.length}일 · {totalItems}개 일정</span>
             </div>
-            <div className="list">
-              {preview.days.map((d) => (
-                <div key={d.id} className="preview-day">
-                  <div className="preview-day__head">{formatDateShort(d.date)}</div>
-                  {d.items.map((it) => (
-                    <div key={it.id}>
-                      <div className="preview-item">
-                        <span className="mono muted small">
-                          {it.startTime}
-                          {it.durationMin > 0 && `–${addMinutes(it.startTime, it.durationMin)}`}
-                        </span>
-                        <span className="preview-item__title">{it.title}</span>
-                        <span className="badge" style={{ color: CATEGORY[it.category].color }}>
-                          {CATEGORY[it.category].label}
-                        </span>
-                      </div>
-                      {it.transportToNext && (
-                        <div className="preview-item preview-item--link">
-                          <span className="mono muted small" />
-                          <span className="preview-item__title muted small">
-                            ↓ {transportLabel(it.transportToNext.mode)}{' '}
-                            {it.transportToNext.durationMin > 0
-                              ? formatDuration(it.transportToNext.durationMin)
-                              : '소요시간 자동 계산'}
-                          </span>
-                        </div>
-                      )}
-                    </div>
-                  ))}
-                </div>
-              ))}
-            </div>
+            <PreviewDays days={expansion.days} highlight={expansion.added} />
             {preview.warnings.length > 0 && (
               <div className="notice notice--warn" style={{ marginTop: 10 }}>
                 <Icon name="warning" size={17} strokeWidth={2} color="var(--orange)" />

@@ -3,15 +3,15 @@ import type { Category, Day, Item, PlaceRef, Settings, Trip, TravelMode } from '
 import { uid } from '../lib/id';
 import { addDaysISO, addMinutes, todayISO, toMinutes } from '../lib/time';
 import { createSampleTrip } from '../lib/sample';
-import { defaultDuration, parsePlanText } from '../lib/parsePlan';
-import { importSheetRows, type SheetImportResult } from '../lib/importSheet';
+import { defaultDuration } from '../lib/parsePlan';
 import type { PlanDraft } from '../lib/autoPlan';
-import { DEFAULT_AI_MODEL } from '../lib/aiPlan';
+import { DEFAULT_AI_MODEL } from '../lib/claude';
 import { DEFAULT_RATE_TO_KRW } from '../lib/fares';
 import { regionById } from '../data/regions';
 import type { PoiEntry } from '../data/poi';
 import { optimizeDay } from '../lib/optimize';
-import { estimateTransport } from '../lib/transport';
+import { estimateTransport, suggestTransport } from '../lib/transport';
+import { haversine } from '../lib/geo';
 import type { TransportLeg } from '../types';
 import { isPublishable, knownReadOnly, markDirty, readEmbeddedState } from '../lib/share';
 import { markDirty as cloudMarkDirty } from '../lib/cloud';
@@ -635,7 +635,9 @@ export const actions = {
           const to = items[i + 1].place.coord;
           if (!from || !to) continue;
 
-          const est = estimateTransport(from, to, link.mode, trip.currency);
+          // 수단을 안 적었으면 거리로 고른다 — 인천→간사이를 지하철로 계산하면 안 된다
+          const mode = link.autoMode ? suggestTransport(haversine(from, to)) : link.mode;
+          const est = estimateTransport(from, to, mode, trip.currency);
           const durationMin = link.manualDuration && link.durationMin > 0 ? link.durationMin : est.durationMin;
           const added = durationMin - link.durationMin;
 
@@ -643,6 +645,8 @@ export const actions = {
             ...items[i],
             transportToNext: {
               ...link,
+              mode,
+              autoMode: undefined,
               durationMin,
               distanceM: est.distanceM,
               cost: link.cost > 0 ? link.cost : est.fare,
@@ -745,17 +749,6 @@ export const actions = {
 
   /* ---------------- 일괄 입력 ---------------- */
 
-  /** 자유 텍스트를 파싱해서 현재 여행에 날짜/항목으로 밀어넣는다 */
-  importPlanText(text: string, mode: 'replace' | 'append' = 'append') {
-    const trip = state.trips.find((t) => t.id === state.activeTripId);
-    const start = trip?.days[0]?.date ?? todayISO();
-    const result = parsePlanText(text, start);
-    if (result.days.length === 0) return result;
-
-    mergeDays(result.days, mode);
-    return result;
-  },
-
   /**
    * AI(또는 규칙 엔진)가 짠 초안을 현재 여행에 넣는다.
    *
@@ -773,7 +766,9 @@ export const actions = {
           id: uid('item'),
           title: it.title,
           category: it.category,
-          place: { name: it.title, address: it.address },
+          place: it.coord
+            ? { name: it.title, address: it.address, coord: it.coord, source: 'local' as const }
+            : { name: it.title, address: it.address },
           startTime: it.startTime,
           durationMin: it.durationMin,
           cost: it.cost,
@@ -784,12 +779,14 @@ export const actions = {
     return days;
   },
 
-  /** 엑셀 표를 현재 여행에 넣는다 */
-  importSheet(rows: string[][], mode: 'replace' | 'append' = 'append'): SheetImportResult {
-    const trip = state.trips.find((t) => t.id === state.activeTripId);
-    const result = importSheetRows(rows, trip?.days[0]?.date ?? todayISO());
-    if (result.days.length > 0) mergeDays(result.days, mode);
-    return result;
+  /** 미리보기에서 다듬은 날짜들을 그대로 넣는다 — 경로 펼치기까지 끝난 결과 */
+  importDays(days: Day[], mode: 'replace' | 'append' = 'append') {
+    if (days.length > 0) mergeDays(days, mode);
+  },
+
+  /** 하루의 일정을 통째로 바꾼다 — 그날의 포괄적인 일정을 펼쳤을 때 */
+  replaceDayItems(dayId: string, items: Item[]) {
+    mapActiveTrip((trip) => mapDay(trip, dayId, (day) => ({ ...day, items })));
   },
 
   /* ---------------- 설정 ---------------- */
