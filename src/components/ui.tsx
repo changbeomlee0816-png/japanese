@@ -13,9 +13,11 @@ interface SheetProps {
   confirmLabel?: string;
   onConfirm?: () => void;
   confirmDisabled?: boolean;
+  /** 고친 것이 곧바로 저장되는 시트는 "취소" 대신 "닫기" */
+  closeLabel?: string;
 }
 
-export function Sheet({ open, title, onClose, children, confirmLabel, onConfirm, confirmDisabled }: SheetProps) {
+export function Sheet({ open, title, onClose, children, confirmLabel, onConfirm, confirmDisabled, closeLabel = '취소' }: SheetProps) {
   useEffect(() => {
     if (!open) return;
     const onKey = (e: KeyboardEvent) => {
@@ -47,7 +49,7 @@ export function Sheet({ open, title, onClose, children, confirmLabel, onConfirm,
         <div className="sheet__grabber" />
         <div className="sheet__header">
           <button className="navbar__action" onClick={onClose} type="button">
-            취소
+            {closeLabel}
           </button>
           <div className="sheet__title">{title}</div>
           {onConfirm ? (

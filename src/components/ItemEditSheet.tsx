@@ -19,11 +19,13 @@ interface Props {
   onClose: () => void;
   /** 열자마자 장소 검색부터 띄울지 */
   focusPlace?: boolean;
+  /** 이 일정에서 쓴 돈을 가계부에 적는다 */
+  onAddExpense?: (item: Item) => void;
 }
 
 const DURATIONS = [15, 30, 45, 60, 90, 120, 180, 240];
 
-export function ItemEditSheet({ open, trip, day, item, bias, onClose, focusPlace }: Props) {
+export function ItemEditSheet({ open, trip, day, item, bias, onClose, focusPlace, onAddExpense }: Props) {
   const [title, setTitle] = useState('');
   const [category, setCategory] = useState<Category>('sight');
   const [startTime, setStartTime] = useState('09:00');
@@ -228,6 +230,20 @@ export function ItemEditSheet({ open, trip, day, item, bias, onClose, focusPlace
               />
             </div>
           </div>
+
+          {item && onAddExpense && (
+            <div className="section">
+              <div className="list">
+                <Row label="이 일정에서 쓴 돈 적기" icon="wallet" accent onClick={() => onAddExpense(item)} />
+              </div>
+              {(() => {
+                const spent = (trip.expenses ?? []).filter((e) => !e.deleted && e.itemId === item.id);
+                if (spent.length === 0) return null;
+                const krw = spent.reduce((n, e) => n + Math.round(e.amount * (e.currency === 'KRW' ? 1 : e.rateToKRW)), 0);
+                return <p className="muted tiny" style={{ padding: '8px 4px 0' }}>가계부에 {spent.length}건 · ₩{krw.toLocaleString('ko-KR')} 적혀 있습니다.</p>;
+              })()}
+            </div>
+          )}
 
           {item && (
             <div className="section">

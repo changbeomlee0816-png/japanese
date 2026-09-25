@@ -60,7 +60,11 @@ export default function App() {
   /* 공유 모드 판별 — 링크로 열렸으면 그 일정을 불러온다 */
   useEffect(() => {
     void initShare();
-    void initCloud((trips) => actions.applyRemoteTrips(trips));
+    void initCloud(
+      (trips) => actions.applyRemoteTrips(trips),
+      (remote) => actions.mergeRemoteTrips(remote),
+      () => actions.currentTrips(),
+    );
   }, []);
 
   /* 현재 보고 있는 위치를 기록해 두었다가 새로고침 뒤 복원 */
