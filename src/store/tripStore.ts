@@ -1,5 +1,5 @@
 import { useSyncExternalStore } from 'react';
-import type { Category, Day, Item, PlaceRef, Settings, Trip, TravelMode } from '../types';
+import type { Category, ChecklistItem, Day, Expense, Item, Member, PlaceRef, Settings, Trip, TravelMode } from '../types';
 import { uid } from '../lib/id';
 import { addDaysISO, addMinutes, todayISO, toMinutes } from '../lib/time';
 import { createSampleTrip } from '../lib/sample';
@@ -15,6 +15,7 @@ import { haversine } from '../lib/geo';
 import type { TransportLeg } from '../types';
 import { isPublishable, knownReadOnly, markDirty, readEmbeddedState } from '../lib/share';
 import { markDirty as cloudMarkDirty } from '../lib/cloud';
+import { collectionsDiffer, mergeTrips } from '../lib/mergeTrips';
 
 const TRIP_KEY = 'tabi.trips.v1';
 const ACTIVE_KEY = 'tabi.activeTripId.v1';
@@ -252,6 +253,27 @@ function sortByTime(items: Item[]): Item[] {
  * ------------------------------------------------------------------ */
 
 export const actions = {
+  /**
+   * 서버본의 가계부·체크리스트를 지금 일정에 합친다. 합친 결과를 돌려주면 그걸 저장한다.
+   * 지금 상태(state)에 합치므로 저장 요청이 오가는 사이에 고친 것도 잃지 않는다.
+   */
+  currentTrips(): Trip[] {
+    return state.trips;
+  },
+
+  mergeRemoteTrips(remote: Trip[]): Trip[] {
+    const merged = mergeTrips(state.trips, migrateTrips(remote));
+    if (collectionsDiffer(merged, state.trips)) {
+      suppressSync += 1;
+      try {
+        set((prev) => ({ ...prev, trips: merged }));
+      } finally {
+        suppressSync -= 1;
+      }
+    }
+    return state.trips;
+  },
+
   /** 공유 서버에서 받아온 일정으로 통째로 교체한다 (저장을 되돌려 걸지 않는다) */
   applyRemoteTrips(input: Trip[]) {
     if (input.length === 0) return;
@@ -787,6 +809,73 @@ export const actions = {
   /** 하루의 일정을 통째로 바꾼다 — 그날의 포괄적인 일정을 펼쳤을 때 */
   replaceDayItems(dayId: string, items: Item[]) {
     mapActiveTrip((trip) => mapDay(trip, dayId, (day) => ({ ...day, items })));
+  },
+
+  /* ---------------- 동행 · 가계부 · 체크리스트 ---------------- */
+
+  /** 동행 목록 — 처음이면 인원수만큼 "나", "동행 1" … 로 만든다 */
+  ensureMembers(): Member[] {
+    const trip = state.trips.find((t) => t.id === state.activeTripId);
+    if (!trip) return [];
+    if (trip.members?.length) return trip.members;
+    const members: Member[] = Array.from({ length: Math.max(1, trip.travelers) }, (_, i) => ({
+      id: uid('m'),
+      name: i === 0 ? '나' : `동행 ${i}`,
+    }));
+    mapActiveTrip((t) => ({ ...t, members }));
+    return members;
+  },
+
+  renameMember(id: string, name: string) {
+    mapActiveTrip((t) => ({ ...t, members: (t.members ?? []).map((m) => (m.id === id ? { ...m, name } : m)) }));
+  },
+
+  addMember(name: string): Member {
+    const member = { id: uid('m'), name };
+    mapActiveTrip((t) => ({ ...t, members: [...(t.members ?? []), member], travelers: Math.max(t.travelers, (t.members?.length ?? 0) + 1) }));
+    return member;
+  },
+
+  saveExpense(input: Omit<Expense, 'id' | 'updatedAt'> & { id?: string }): Expense {
+    const expense: Expense = { ...input, id: input.id ?? uid('x'), updatedAt: new Date().toISOString() };
+    mapActiveTrip((t) => {
+      const list = t.expenses ?? [];
+      const exists = list.some((e) => e.id === expense.id);
+      return { ...t, expenses: exists ? list.map((e) => (e.id === expense.id ? expense : e)) : [...list, expense] };
+    });
+    return expense;
+  },
+
+  /** 지운 표시만 남긴다 — 같은 링크의 다른 화면에서 되살아나지 않게 */
+  deleteExpense(id: string) {
+    const now = new Date().toISOString();
+    mapActiveTrip((t) => ({ ...t, expenses: (t.expenses ?? []).map((e) => (e.id === id ? { ...e, deleted: true, updatedAt: now } : e)) }));
+  },
+
+  setChecklist(items: Array<Pick<ChecklistItem, 'text' | 'group'> & { note?: string }>) {
+    const now = new Date().toISOString();
+    mapActiveTrip((t) => ({
+      ...t,
+      checklist: [
+        ...(t.checklist ?? []),
+        ...items.map((i) => ({ id: uid('c'), text: i.text, group: i.group, note: i.note, done: false, updatedAt: now })),
+      ],
+    }));
+  },
+
+  toggleChecklist(id: string, by?: string) {
+    const now = new Date().toISOString();
+    mapActiveTrip((t) => ({
+      ...t,
+      checklist: (t.checklist ?? []).map((c) =>
+        c.id === id ? { ...c, done: !c.done, doneBy: !c.done ? by : undefined, updatedAt: now } : c,
+      ),
+    }));
+  },
+
+  removeChecklist(id: string) {
+    const now = new Date().toISOString();
+    mapActiveTrip((t) => ({ ...t, checklist: (t.checklist ?? []).map((c) => (c.id === id ? { ...c, deleted: true, updatedAt: now } : c)) }));
   },
 
   /* ---------------- 설정 ---------------- */

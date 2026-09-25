@@ -122,6 +122,18 @@ function normalizeUrl(id: string) {
  * ------------------------------------------------------------------ */
 
 type ApplyTrips = (trips: Trip[]) => void;
+/** 서버본을 지금 화면의 일정과 합쳐 반영하고, 합친 결과를 돌려준다 (가계부·체크리스트) */
+type MergeRemote = (remote: Trip[]) => Trip[];
+let mergeRemote: MergeRemote | null = null;
+/** 폴링으로 이미 합친 서버 버전 — 같은 버전을 되풀이해 받지 않는다 */
+let lastMergedAt: string | null = null;
+/** 지금 화면의 일정 — 서버본과 일정표가 다른지 볼 때만 쓴다 */
+let currentTrips: () => Trip[] = () => [];
+
+function itineraryDiffers(remote: Trip[]): boolean {
+  const strip = (ts: Trip[]) => JSON.stringify(ts.map((t) => [t.id, t.title, t.days, t.saved, t.destination, t.travelers]));
+  return strip(remote) !== strip(currentTrips());
+}
 
 let applyTrips: ApplyTrips = () => {};
 let lastSyncedAt: string | null = null;
@@ -131,8 +143,10 @@ let pollTimer: number | undefined;
  * 앱 시작 시 한 번. URL에 ?t= 가 있으면 그 일정을 불러온다.
  * 반환값이 true면 스토어의 로컬 일정 대신 공유본이 적용된다.
  */
-export async function initCloud(onTrips: ApplyTrips): Promise<CloudMode> {
+export async function initCloud(onTrips: ApplyTrips, onMerge?: MergeRemote, getTrips?: () => Trip[]): Promise<CloudMode> {
   applyTrips = onTrips;
+  mergeRemote = onMerge ?? null;
+  if (getTrips) currentTrips = getTrips;
 
   if (!cloudConfigured()) {
     set({ mode: 'off' });
@@ -249,11 +263,19 @@ export async function flush(): Promise<void> {
   const token = currentToken();
   if (!pending || !state.tripId || !token || state.mode !== 'owner') return;
 
-  const payload = pending;
+  let payload = pending;
   pending = null;
   set({ status: 'saving', error: null });
 
   try {
+    // 그사이 다른 사람이 저장했다면 가계부·체크리스트를 합친 뒤에 저장한다 — 동행이 적은 지출이 사라지지 않게
+    if (mergeRemote && lastSyncedAt) {
+      const head = await fetchUpdatedAt(state.tripId).catch(() => null);
+      if (head && head !== lastSyncedAt) {
+        const remote = await fetchSharedTrip(state.tripId).catch(() => null);
+        if (remote) payload = { ...payload, trips: mergeRemote(remote.data.trips) };
+      }
+    }
     const updatedAt = await saveSharedTrip(state.tripId, token, payload.title, payload.trips);
     lastSyncedAt = updatedAt;
     set({ status: 'saved', lastSyncedAt: updatedAt, error: null, remoteUpdate: false });
@@ -300,8 +322,13 @@ async function poll() {
       // 보기만 하는 쪽은 바로 최신본으로 갱신한다
       await pull();
     } else {
-      // 수정 권한이 있는 쪽은 내 편집을 덮어쓰지 않도록 알림만 띄운다
-      set({ remoteUpdate: true });
+      if (updatedAt === lastMergedAt) return;
+      lastMergedAt = updatedAt;
+      // 가계부·체크리스트는 한 줄씩 보태는 곳이라 바로 합쳐 보여 준다 — 동행이 적은 지출이 곧장 보인다
+      const remote = mergeRemote ? await fetchSharedTrip(state.tripId) : null;
+      if (remote && mergeRemote) mergeRemote(remote.data.trips);
+      // 일정표는 내 편집을 덮어쓰지 않도록 알림만 띄운다
+      if (!remote || itineraryDiffers(remote.data.trips)) set({ remoteUpdate: true });
     }
   } catch {
     /* 폴링 실패는 조용히 넘긴다 — 다음 주기에 다시 시도한다 */

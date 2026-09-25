@@ -81,6 +81,54 @@ export interface Day {
   items: Item[];
 }
 
+/** 함께 가는 사람 — 가계부 정산과 체크리스트에 쓴다 */
+export interface Member {
+  id: string;
+  name: string;
+}
+
+/**
+ * 실제로 쓴 돈 한 건.
+ *
+ * 여럿이 같은 링크로 동시에 적을 수 있어서, 저장할 때 서버 쪽과 id 로 합친다.
+ * 그래서 지운 것도 바로 없애지 않고 deleted 로 남겨 둔다 (다른 사람 화면에서 되살아나지 않게).
+ */
+export interface Expense {
+  id: string;
+  title: string;
+  /** currency 단위 금액 */
+  amount: number;
+  currency: string;
+  /** 적을 때의 환율(1 currency = ? 원) — 모두가 같은 숫자로 정산하도록 고정해 둔다 */
+  rateToKRW: number;
+  category: Category;
+  /** "YYYY-MM-DD" */
+  date: string;
+  /** Member.id */
+  paidBy: string;
+  /** 나눠 낼 사람 Member.id — 비어 있으면 모두 */
+  splitAmong: string[];
+  method?: 'cash' | 'card';
+  /** 일정 항목에서 적은 경우 */
+  itemId?: string;
+  memo?: string;
+  updatedAt: string;
+  deleted?: boolean;
+}
+
+export interface ChecklistItem {
+  id: string;
+  text: string;
+  /** 묶음 이름 ("서류·예약", "돈", …) */
+  group: string;
+  done: boolean;
+  /** 체크한 사람 Member.id */
+  doneBy?: string;
+  note?: string;
+  updatedAt: string;
+  deleted?: boolean;
+}
+
 export interface Trip {
   id: string;
   title: string;
@@ -96,6 +144,14 @@ export interface Trip {
   days: Day[];
   /** 가고 싶은 곳 — 날짜를 아직 안 정한 후보들 */
   saved?: Item[];
+  /** 함께 가는 사람 */
+  members?: Member[];
+  /** 가계부 */
+  expenses?: Expense[];
+  /** 여행 준비 체크리스트 */
+  checklist?: ChecklistItem[];
+  /** 환율을 마지막으로 맞춘 날 (자동 갱신 표시용) */
+  rateDate?: string;
   updatedAt: string;
 }
 

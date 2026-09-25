@@ -6,6 +6,9 @@ import { CATEGORY, CATEGORY_ORDER } from '../lib/category';
 import { currencySymbol, formatKRW, formatMoney, DEFAULT_RATE_TO_KRW } from '../lib/fares';
 import { formatDateShort, formatDuration } from '../lib/time';
 import { Icon } from './Icon';
+import { Segmented } from './ui';
+import { FxCard } from './FxCard';
+import { ExpenseBook, SettleView } from './ExpenseBook';
 
 interface Props {
   trip: Trip;
@@ -24,6 +27,8 @@ const ZERO: DayTotals = { transit: 0, spend: 0, minutes: 0, byCategory: {} };
 
 export function CostScreen({ trip, settings, readOnly = false }: Props) {
   const [totals, setTotals] = useState<Record<string, DayTotals>>({});
+  // 이미 적은 지출이 있으면 가계부부터 — 여행 중에는 그게 먼저다
+  const [view, setView] = useState<'budget' | 'book' | 'settle'>(() => (trip.expenses?.some((e) => !e.deleted) ? 'book' : 'budget'));
 
   const report = useCallback((dayId: string, next: DayTotals) => {
     setTotals((prev) => {
@@ -51,6 +56,10 @@ export function CostScreen({ trip, settings, readOnly = false }: Props) {
   const groupTotal = perPerson * trip.travelers;
   const maxCat = Math.max(1, ...Object.values(grand.byCategory).map((v) => v ?? 0), grand.transit);
 
+  // 모든 날의 예상이 들어온 뒤에만 가계부와 견준다
+  const estimateReady = trip.days.every((d) => totals[d.id]);
+  const estimateKRW = estimateReady ? groupTotal * trip.rateToKRW : null;
+
   return (
     <>
       <div className="large-title">
@@ -58,6 +67,28 @@ export function CostScreen({ trip, settings, readOnly = false }: Props) {
         <p>{trip.title} · {trip.days.length}일 · {trip.travelers}인</p>
       </div>
 
+      <FxCard trip={trip} readOnly={readOnly} />
+
+      <div className="section">
+        <Segmented
+          value={view}
+          onChange={setView}
+          options={[
+            { value: 'budget', label: '예산' },
+            { value: 'book', label: '가계부' },
+            { value: 'settle', label: '정산' },
+          ]}
+        />
+      </div>
+
+      {/* 예산 화면이 아닐 때도 날짜별 예상은 계속 계산한다 (가계부의 예산 대비에 쓴다) */}
+      {view !== 'budget' && trip.days.map((day) => (
+        <DayTotalsProbe key={day.id} day={day} trip={trip} enabled={!!settings.googleMapsApiKey} onTotals={report} />
+      ))}
+      {view === 'book' && <ExpenseBook trip={trip} settings={settings} readOnly={readOnly} estimateKRW={estimateKRW} />}
+      {view === 'settle' && <SettleView trip={trip} readOnly={readOnly} />}
+
+      {view === 'budget' && (<>
       <div className="section">
         <div className="card cost-hero">
           <span className="cost-hero__label">1인 예상 총액</span>
@@ -185,23 +216,13 @@ export function CostScreen({ trip, settings, readOnly = false }: Props) {
           </p>
         </div>
       )}
+      </>)}
     </>
   );
 }
 
-function DayCostRow({
-  day,
-  index,
-  trip,
-  enabled,
-  onTotals,
-}: {
-  day: Day;
-  index: number;
-  trip: Trip;
-  enabled: boolean;
-  onTotals: (dayId: string, t: DayTotals) => void;
-}) {
+/** 하루 예상 비용 — 화면에 그리는 쪽(DayCostRow)과 보이지 않게 계산만 하는 쪽(DayTotalsProbe)이 함께 쓴다 */
+function useDayTotals(day: Day, trip: Trip, enabled: boolean, onTotals: (dayId: string, t: DayTotals) => void): DayTotals {
   const { legs } = useLegs(day, trip.currency, enabled);
 
   const totals = useMemo<DayTotals>(() => {
@@ -223,6 +244,28 @@ function DayCostRow({
     onTotals(day.id, totals);
   }, [day.id, totals, onTotals]);
 
+  return totals;
+}
+
+function DayTotalsProbe(props: { day: Day; trip: Trip; enabled: boolean; onTotals: (dayId: string, t: DayTotals) => void }) {
+  useDayTotals(props.day, props.trip, props.enabled, props.onTotals);
+  return null;
+}
+
+function DayCostRow({
+  day,
+  index,
+  trip,
+  enabled,
+  onTotals,
+}: {
+  day: Day;
+  index: number;
+  trip: Trip;
+  enabled: boolean;
+  onTotals: (dayId: string, t: DayTotals) => void;
+}) {
+  const totals = useDayTotals(day, trip, enabled, onTotals);
   const sum = totals.transit + totals.spend;
 
   return (

@@ -10,8 +10,9 @@ import { canListen, canSpeak, listen, speak, type SpeechLang } from '../lib/spee
 import { translateActions, useTranslateStore, type SavedTranslation } from '../lib/translateStore';
 import { Segmented } from './ui';
 import { Icon } from './Icon';
+import { ConversationOverlay } from './Conversation';
 
-type Mode = 'text' | 'camera' | 'phrases';
+type Mode = 'text' | 'camera' | 'talk' | 'phrases';
 
 interface Props {
   settings: Settings;
@@ -52,6 +53,7 @@ export function TranslateScreen({ settings, onOpenSettings }: Props) {
           options={[
             { value: 'text', label: '텍스트' },
             { value: 'camera', label: '카메라' },
+            { value: 'talk', label: '대화' },
             { value: 'phrases', label: '회화' },
           ]}
         />
@@ -61,6 +63,7 @@ export function TranslateScreen({ settings, onOpenSettings }: Props) {
         <TextMode settings={settings} direction={direction} onDirection={setDirection} onShow={setShowcase} onOpenSettings={onOpenSettings} />
       )}
       {mode === 'camera' && <CameraMode settings={settings} onShow={setShowcase} onOpenSettings={onOpenSettings} />}
+      {mode === 'talk' && <TalkMode settings={settings} />}
       {mode === 'phrases' && <PhraseMode onShow={setShowcase} />}
 
       {showcase && <ShowcaseOverlay item={showcase} onClose={() => setShowcase(null)} />}
@@ -438,6 +441,34 @@ function CameraMode({ settings, onShow, onOpenSettings }: { settings: Settings; 
         </div>
       )}
     </>
+  );
+}
+
+/* ─────────────────────────── 대화 ─────────────────────────── */
+
+function TalkMode({ settings }: { settings: Settings }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <div className="section">
+      <div className="card talk-intro">
+        <div className="talk-intro__art" aria-hidden="true">
+          <span lang="ja">こんにちは</span>
+          <span>안녕하세요</span>
+        </div>
+        <p className="talk-intro__text">
+          휴대폰을 탁자에 놓고 마주 앉아 쓰세요. <b>위쪽 절반은 상대방</b>을 향해 뒤집혀 보이고,
+          한쪽이 말하면 반대쪽에 번역이 뜨고 소리로도 읽어 줍니다.
+        </p>
+        <button type="button" className="btn btn--primary btn--block" onClick={() => setOpen(true)}>
+          <Icon name="mic" size={18} strokeWidth={2} /> 대화 시작
+        </button>
+        <p className="muted tiny" style={{ marginTop: 10, lineHeight: 1.55 }}>
+          {canListen() ? '말하기 버튼을 누르고 말하면 됩니다. 입력칸에 쳐도 됩니다.' : '이 브라우저는 음성 인식을 지원하지 않아 입력칸으로 주고받습니다.'}
+          {settings.anthropicApiKey ? ' 번역은 Claude가 합니다.' : ' 키가 없으면 회화집·무료 번역으로 옮깁니다.'}
+        </p>
+      </div>
+      {open && <ConversationOverlay settings={settings} onClose={() => setOpen(false)} />}
+    </div>
   );
 }
 

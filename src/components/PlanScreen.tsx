@@ -21,6 +21,8 @@ import { TransportSheet } from './TransportSheet';
 import { SheetImportSheet } from './SheetImportSheet';
 import { AutoPlanSheet } from './AutoPlanSheet';
 import { ExpandSheet } from './ExpandSheet';
+import { ExpenseSheet, type ExpenseDraft } from './ExpenseSheet';
+import { ChecklistSheet, PrepCard, tripPhase } from './Checklist';
 import { findBroadBlocks } from '../lib/expandPlan';
 import { useWeather } from '../lib/weather';
 import { Icon } from './Icon';
@@ -50,6 +52,8 @@ export function PlanScreen({ trip, settings, dayIndex, onDayChange, bias, onShow
   const [transport, setTransport] = useState(false);
   const [sheetImport, setSheetImport] = useState(false);
   const [autoPlan, setAutoPlan] = useState(false);
+  const [expenseDraft, setExpenseDraft] = useState<ExpenseDraft | null>(null);
+  const [checklist, setChecklist] = useState(false);
   /** 펼칠 범위 — 하루 또는 여행 전체 */
   const [expandScope, setExpandScope] = useState<'day' | 'trip' | null>(null);
   const broadInTrip = useMemo(() => findBroadBlocks(trip.days, trip.regionId), [trip.days, trip.regionId]);
@@ -119,6 +123,7 @@ export function PlanScreen({ trip, settings, dayIndex, onDayChange, bias, onShow
         <p>
           {trip.destination} · {tripLength}일 · {trip.travelers}인
           {trip.days[0] && ` · ${formatDateKo(trip.days[0].date)}부터`}
+          {(() => { const p = tripPhase(trip); return p && p.kind !== 'after' ? ` · ${p.label}` : ''; })()}
         </p>
       </div>
 
@@ -135,6 +140,7 @@ export function PlanScreen({ trip, settings, dayIndex, onDayChange, bias, onShow
 
       {view === 'overview' ? (
         <>
+          <PrepCard trip={trip} onOpen={() => setChecklist(true)} />
           <TripOverview
             trip={trip}
             weather={weather}
@@ -331,7 +337,18 @@ export function PlanScreen({ trip, settings, dayIndex, onDayChange, bias, onShow
           bias={bias}
           focusPlace={editing.focusPlace}
           onClose={() => setEditing(null)}
+          onAddExpense={readOnly ? undefined : (it) => {
+            actions.ensureMembers();
+            setEditing(null);
+            setExpenseDraft({ title: it.title, category: it.category, date: day.date, itemId: it.id, amount: it.cost || undefined });
+          }}
         />
+      )}
+
+      {checklist && <ChecklistSheet trip={trip} readOnly={readOnly} onClose={() => setChecklist(false)} />}
+
+      {expenseDraft && (
+        <ExpenseSheet trip={trip} settings={settings} draft={expenseDraft} onClose={() => setExpenseDraft(null)} />
       )}
 
       {expandScope && (
